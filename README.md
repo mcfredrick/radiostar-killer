@@ -40,6 +40,11 @@ uv run radiostar-killer ./my-clips ./song.wav -o music-video.mp4 --seed 42
 | `--format` | `youtube` | Output format preset (see [Format Presets](#format-presets)) |
 | `--shorts` | off | Generate 3 YouTube Shorts from the most energetic sections |
 | `--short-duration` | `60` | Duration in seconds for each short |
+| `--effects` | off | Apply random visual effects to clips |
+| `--effect-rate` | `0.75` | Proportion of clips to apply effects to (0.0–1.0) |
+| `--transitions` | off | Apply transition effects between clips |
+| `--transition-rate` | `1.0` | Proportion of clip boundaries with transitions (0.0–1.0) |
+| `--transition-duration` | `0.3` | Transition overlap in seconds |
 
 ### Format Presets
 
@@ -83,6 +88,26 @@ When `--shorts` is used:
 - No full-length video is generated — only the shorts
 - Output files are named `{stem}_short_1.mp4`, `{stem}_short_2.mp4`, `{stem}_short_3.mp4`
 - If the audio is too short to produce 3 non-overlapping sections, fewer shorts are generated
+
+### Effects and Transitions
+
+Use `--effects` to apply random visual effects (gamma correction, brightness, contrast, black & white, color inversion, mirroring, painting style, zoom, blur, color tinting) to individual clips. Use `--transitions` to add smooth transitions (crossfade, slide in from any direction) between clips instead of hard cuts.
+
+```bash
+# Apply effects to ~75% of clips and transitions at every cut
+uv run radiostar-killer ./clips ./song.wav --effects --transitions
+
+# Effects on all clips, transitions on half the boundaries
+uv run radiostar-killer ./clips ./song.wav --effects --effect-rate 1.0 --transitions --transition-rate 0.5
+
+# Longer crossfade transitions (0.5s overlap)
+uv run radiostar-killer ./clips ./song.wav --transitions --transition-duration 0.5
+
+# Reproducible with seed
+uv run radiostar-killer ./clips ./song.wav --effects --transitions --seed 42
+```
+
+Both flags combine with `--seed` for reproducible output. Effects and transitions work with all format presets and with `--shorts`.
 
 ## How it works
 

@@ -10,6 +10,11 @@ from moviepy import (
 )
 
 from radiostar_killer.clips import ClipAssignment
+from radiostar_killer.effects import (
+    apply_random_effect,
+    compose_with_transitions,
+    select_transition,
+)
 from radiostar_killer.formats import FormatPreset
 
 
@@ -53,11 +58,17 @@ def build_video(
     seed: int | None = None,
     audio_start: float = 0.0,
     audio_end: float | None = None,
+    effects: bool = False,
+    effect_rate: float = 0.75,
+    transitions: bool = False,
+    transition_rate: float = 1.0,
+    transition_duration: float = 0.3,
 ) -> Path:
     """Build the final beat-synced video from clip assignments.
 
     Prepares each clip, concatenates them, overlays the audio, and exports.
     When audio_start/audio_end are set, trims the audio to that range.
+    Optionally applies random visual effects and transitions between clips.
     """
     rng = random.Random(seed)
     output_path = Path(output_path)
@@ -72,9 +83,24 @@ def build_video(
             preset.fps,
             rng,
         )
+        if effects:
+            clip = apply_random_effect(clip, rng, effect_rate)
         prepared.append(clip)
 
-    final = concatenate_videoclips(prepared, method="compose")
+    if transitions and len(prepared) > 1:
+        transition_specs = [
+            select_transition(
+                rng,
+                transition_rate,
+                transition_duration,
+                prepared[i].duration,
+                prepared[i + 1].duration,
+            )
+            for i in range(len(prepared) - 1)
+        ]
+        final = compose_with_transitions(prepared, transition_specs)
+    else:
+        final = concatenate_videoclips(prepared, method="compose")
 
     audio = AudioFileClip(str(audio_path))
     # Trim audio to the specified range if set

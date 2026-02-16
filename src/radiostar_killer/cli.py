@@ -83,6 +83,34 @@ def main() -> None:
         default=60.0,
         help="Duration in seconds for each short (default: 60)",
     )
+    parser.add_argument(
+        "--effects",
+        action="store_true",
+        help="Apply random visual effects to clips",
+    )
+    parser.add_argument(
+        "--effect-rate",
+        type=float,
+        default=0.75,
+        help="Proportion of clips to apply effects to (0.0–1.0, default: 0.75)",
+    )
+    parser.add_argument(
+        "--transitions",
+        action="store_true",
+        help="Apply transition effects between clips",
+    )
+    parser.add_argument(
+        "--transition-rate",
+        type=float,
+        default=1.0,
+        help="Proportion of boundaries with transitions (0.0–1.0, default: 1.0)",
+    )
+    parser.add_argument(
+        "--transition-duration",
+        type=float,
+        default=0.3,
+        help="Transition overlap in seconds (default: 0.3)",
+    )
 
     args = parser.parse_args()
 
@@ -102,6 +130,11 @@ def main() -> None:
             preset=preset,
             shorts=args.shorts,
             short_duration=args.short_duration,
+            effects=args.effects,
+            effect_rate=args.effect_rate,
+            transitions=args.transitions,
+            transition_rate=args.transition_rate,
+            transition_duration=args.transition_duration,
         )
         if isinstance(result, list):
             for p in result:

@@ -19,6 +19,11 @@ def run(
     preset: FormatPreset = PRESETS["youtube"],
     shorts: bool = False,
     short_duration: float = 60.0,
+    effects: bool = False,
+    effect_rate: float = 0.75,
+    transitions: bool = False,
+    transition_rate: float = 1.0,
+    transition_duration: float = 0.3,
 ) -> Path | list[Path]:
     """Run the full music video generation pipeline.
 
@@ -35,6 +40,12 @@ def run(
     clip_paths = discover_clips(clips_dir)
     print(f"  Found {len(clip_paths)} clips")
 
+    if effects:
+        print(f"  Effects enabled (rate: {effect_rate:.0%})")
+    if transitions:
+        print(f"  Transitions enabled (rate: {transition_rate:.0%}, "
+              f"duration: {transition_duration}s)")
+
     if shorts:
         return _build_shorts(
             clips_dir=clips_dir,
@@ -45,6 +56,11 @@ def run(
             min_beats=min_beats,
             seed=seed,
             short_duration=short_duration,
+            effects=effects,
+            effect_rate=effect_rate,
+            transitions=transitions,
+            transition_rate=transition_rate,
+            transition_duration=transition_duration,
         )
 
     beat_groups = group_beats(audio_info.beat_times, audio_info.duration, min_beats)
@@ -55,7 +71,18 @@ def run(
     print(f"Building video: {output}")
     res = preset.resolution
     print(f"  Format: {preset.name}, Resolution: {res[0]}x{res[1]}, FPS: {preset.fps}")
-    result = build_video(assignments, audio_file, output, preset, seed)
+    result = build_video(
+        assignments,
+        audio_file,
+        output,
+        preset,
+        seed,
+        effects=effects,
+        effect_rate=effect_rate,
+        transitions=transitions,
+        transition_rate=transition_rate,
+        transition_duration=transition_duration,
+    )
 
     print(f"Done! Output: {result}")
     return result
@@ -70,6 +97,11 @@ def _build_shorts(
     min_beats: int,
     seed: int | None,
     short_duration: float,
+    effects: bool = False,
+    effect_rate: float = 0.75,
+    transitions: bool = False,
+    transition_rate: float = 1.0,
+    transition_duration: float = 0.3,
 ) -> list[Path]:
     """Build YouTube Shorts from the most energetic sections."""
     from radiostar_killer.audio import AudioInfo
@@ -120,6 +152,11 @@ def _build_shorts(
             seed,
             audio_start=section.start,
             audio_end=section.end,
+            effects=effects,
+            effect_rate=effect_rate,
+            transitions=transitions,
+            transition_rate=transition_rate,
+            transition_duration=transition_duration,
         )
         output_paths.append(short_output)
 
