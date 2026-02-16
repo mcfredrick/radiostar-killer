@@ -25,6 +25,7 @@ The pipeline flows through five modules in order:
 cli.py → main.py → audio.py → clips.py → video.py
                     formats.py (preset config)
                     effects.py (visual effects & transitions)
+                    overlays.py (title card & info overlay)
 ```
 
 ### Module Responsibilities
@@ -38,6 +39,7 @@ cli.py → main.py → audio.py → clips.py → video.py
 | `video.py` | `prepare_clip()` trims or loops a clip to fit a duration; `build_video()` concatenates clips, optionally applies effects/transitions, overlays audio, exports MP4 using `FormatPreset` |
 | `formats.py` | `FormatPreset` dataclass + `PRESETS` dict (youtube, youtube-shorts, tiktok, instagram-reels) + `resolve_format()` helper |
 | `effects.py` | `apply_random_effect()` picks from 11 visual effects (8 built-in moviepy + 3 custom); `select_transition()` and `compose_with_transitions()` handle crossfade/slide transitions between clips |
+| `overlays.py` | `create_title_card()` generates a full-screen opening title card; `create_info_overlay()` generates an MTV/VH1-style song info overlay; `snap_to_nearest_beat()` snaps title card duration to the closest beat |
 
 ### Key Data Structures
 
@@ -46,6 +48,8 @@ cli.py → main.py → audio.py → clips.py → video.py
 - **`EnergySection`** (dataclass): start, end, mean_energy
 - **`ClipAssignment`** (dataclass): path, target_duration, original_duration
 - **`TransitionSpec`** (dataclass): transition_type, duration
+- **`TitleCardConfig`** (frozen dataclass): title, subtitle, duration, fade_duration, bg_color, text_color, font
+- **`InfoOverlayConfig`** (frozen dataclass): title, artist, album, display_duration, fade_in_duration, fade_out_duration, delay, font, text_color
 - Beat groups are `list[tuple[float, float]]` — each tuple is `(start_time, end_time)` in seconds
 
 ### Pipeline Flow
@@ -56,7 +60,7 @@ cli.py → main.py → audio.py → clips.py → video.py
 3. **Clip discovery**: Scans directory for `.mp4`, `.mov`, `.avi` files
 4. **Clip assignment**: Shuffled round-robin. If fewer clips than groups, clips are recycled
 5. **Effects** (optional): If `--effects`, random visual effects applied per-clip based on `--effect-rate`
-6. **Video assembly**: Each clip trimmed from random start (if too long) or looped (if too short), resized, concatenated (or composed with transitions if `--transitions`), audio overlaid, exported using preset codec/bitrate settings
+6. **Video assembly**: Each clip trimmed from random start (if too long) or looped (if too short), resized, concatenated (or composed with transitions if `--transitions`), optionally prepended with title card and/or composited with info overlay, audio overlaid, exported using preset codec/bitrate settings
 
 **Shorts path** (`--shorts`):
 1. **Beat detection**: Same as normal
@@ -76,7 +80,8 @@ cli.py → main.py → audio.py → clips.py → video.py
 - `tests/test_clips.py` — unit tests for `discover_clips()` and `assign_clips_to_groups()` (10 tests)
 - `tests/test_effects.py` — unit tests for `apply_random_effect()`, `select_transition()`, and `compose_with_transitions()` (16 tests)
 - `tests/test_formats.py` — unit tests for `PRESETS` validation and `resolve_format()` (13 tests)
-- `tests/test_e2e.py` — full pipeline tests using synthetic color clips and a sine wave audio file, including effects+transitions variant (marked `@pytest.mark.e2e`)
+- `tests/test_overlays.py` — unit tests for `TitleCardConfig`, `InfoOverlayConfig`, `snap_to_nearest_beat()`, `create_title_card()`, and `create_info_overlay()` (20 tests)
+- `tests/test_e2e.py` — full pipeline tests using synthetic color clips and a sine wave audio file, including effects+transitions, title card, info overlay, and combined variants (marked `@pytest.mark.e2e`)
 - `tests/conftest.py` — shared fixtures: `tmp_clips_dir` (3 color clips, 320x240, 10fps) and `tmp_audio_file` (6s sine wave)
 
 ## Important Notes

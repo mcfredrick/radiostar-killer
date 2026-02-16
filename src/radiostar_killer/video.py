@@ -5,6 +5,7 @@ from pathlib import Path
 
 from moviepy import (
     AudioFileClip,
+    CompositeVideoClip,
     VideoFileClip,
     concatenate_videoclips,
 )
@@ -16,6 +17,12 @@ from radiostar_killer.effects import (
     select_transition,
 )
 from radiostar_killer.formats import FormatPreset
+from radiostar_killer.overlays import (
+    InfoOverlayConfig,
+    TitleCardConfig,
+    create_info_overlay,
+    create_title_card,
+)
 
 
 def _resize_crop(
@@ -90,6 +97,8 @@ def build_video(
     transitions: bool = False,
     transition_rate: float = 1.0,
     transition_duration: float = 0.3,
+    title_card_config: TitleCardConfig | None = None,
+    info_overlay_config: InfoOverlayConfig | None = None,
 ) -> Path:
     """Build the final beat-synced video from clip assignments.
 
@@ -128,6 +137,29 @@ def build_video(
         final = compose_with_transitions(prepared, transition_specs)
     else:
         final = concatenate_videoclips(prepared, method="compose")
+
+    # Prepend title card if configured
+    if title_card_config is not None:
+        title_clip = create_title_card(
+            title_card_config, preset.resolution, preset.fps
+        )
+        final = concatenate_videoclips([title_clip, final], method="compose")
+
+    # Composite info overlay if configured
+    if info_overlay_config is not None:
+        overlay = create_info_overlay(
+            info_overlay_config, preset.resolution, preset.fps
+        )
+        # Ensure overlay doesn't exceed video duration
+        overlay_end = info_overlay_config.delay + info_overlay_config.display_duration
+        if overlay_end <= final.duration:
+            final = CompositeVideoClip([final, overlay])
+        else:
+            # Truncate overlay to fit within video
+            remaining = final.duration - info_overlay_config.delay
+            if remaining > 0:
+                overlay = overlay.with_duration(remaining)
+                final = CompositeVideoClip([final, overlay])
 
     audio = AudioFileClip(str(audio_path))
     # Trim audio to the specified range if set

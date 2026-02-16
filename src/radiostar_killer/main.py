@@ -7,6 +7,11 @@ import numpy as np
 from radiostar_killer.audio import analyze_audio, analyze_energy, group_beats
 from radiostar_killer.clips import assign_clips_to_groups, discover_clips
 from radiostar_killer.formats import PRESETS, FormatPreset
+from radiostar_killer.overlays import (
+    InfoOverlayConfig,
+    TitleCardConfig,
+    snap_to_nearest_beat,
+)
 from radiostar_killer.video import build_video
 
 
@@ -24,6 +29,13 @@ def run(
     transitions: bool = False,
     transition_rate: float = 1.0,
     transition_duration: float = 0.3,
+    title: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+    title_card: bool = False,
+    title_card_duration: float = 3.5,
+    info_overlay: bool = False,
+    info_overlay_duration: float = 8.0,
 ) -> Path | list[Path]:
     """Run the full music video generation pipeline.
 
@@ -46,6 +58,27 @@ def run(
         print(f"  Transitions enabled (rate: {transition_rate:.0%}, "
               f"duration: {transition_duration}s)")
 
+    # Build overlay configs
+    title_card_config = None
+    if title_card and title:
+        snapped = snap_to_nearest_beat(title_card_duration, audio_info.beat_times)
+        print(f"  Title card: {snapped:.2f}s (snapped from {title_card_duration:.2f}s)")
+        title_card_config = TitleCardConfig(
+            title=title,
+            subtitle=artist,
+            duration=snapped,
+        )
+
+    info_overlay_config = None
+    if info_overlay and title and artist:
+        print(f"  Info overlay: {info_overlay_duration:.1f}s")
+        info_overlay_config = InfoOverlayConfig(
+            title=title,
+            artist=artist,
+            album=album,
+            display_duration=info_overlay_duration,
+        )
+
     if shorts:
         return _build_shorts(
             clips_dir=clips_dir,
@@ -61,6 +94,8 @@ def run(
             transitions=transitions,
             transition_rate=transition_rate,
             transition_duration=transition_duration,
+            title_card_config=title_card_config,
+            info_overlay_config=info_overlay_config,
         )
 
     beat_groups = group_beats(audio_info.beat_times, audio_info.duration, min_beats)
@@ -82,6 +117,8 @@ def run(
         transitions=transitions,
         transition_rate=transition_rate,
         transition_duration=transition_duration,
+        title_card_config=title_card_config,
+        info_overlay_config=info_overlay_config,
     )
 
     print(f"Done! Output: {result}")
@@ -102,6 +139,8 @@ def _build_shorts(
     transitions: bool = False,
     transition_rate: float = 1.0,
     transition_duration: float = 0.3,
+    title_card_config: TitleCardConfig | None = None,
+    info_overlay_config: InfoOverlayConfig | None = None,
 ) -> list[Path]:
     """Build YouTube Shorts from the most energetic sections."""
     from radiostar_killer.audio import AudioInfo
@@ -157,6 +196,8 @@ def _build_shorts(
             transitions=transitions,
             transition_rate=transition_rate,
             transition_duration=transition_duration,
+            title_card_config=title_card_config,
+            info_overlay_config=info_overlay_config,
         )
         output_paths.append(short_output)
 

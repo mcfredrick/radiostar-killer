@@ -111,8 +111,62 @@ def main() -> None:
         default=0.3,
         help="Transition overlap in seconds (default: 0.3)",
     )
+    parser.add_argument(
+        "--title",
+        type=str,
+        default=None,
+        help="Song title (required for --title-card and --info-overlay)",
+    )
+    parser.add_argument(
+        "--artist",
+        type=str,
+        default=None,
+        help="Artist name (required for --info-overlay)",
+    )
+    parser.add_argument(
+        "--album",
+        type=str,
+        default=None,
+        help="Album name (optional, for info overlay)",
+    )
+    parser.add_argument(
+        "--title-card",
+        action="store_true",
+        help="Enable opening title card",
+    )
+    parser.add_argument(
+        "--title-card-duration",
+        type=float,
+        default=3.5,
+        help="Title card duration in seconds before beat-snapping (default: 3.5)",
+    )
+    parser.add_argument(
+        "--info-overlay",
+        action="store_true",
+        help="Enable MTV/VH1-style song info overlay",
+    )
+    parser.add_argument(
+        "--info-overlay-duration",
+        type=float,
+        default=8.0,
+        help="Info overlay display duration in seconds (default: 8.0)",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Use ultrafast encoding preset and max threads for faster export",
+    )
 
     args = parser.parse_args()
+
+    # Validate overlay flags
+    if args.title_card and not args.title:
+        parser.error("--title-card requires --title")
+    if args.info_overlay:
+        if not args.title:
+            parser.error("--info-overlay requires --title")
+        if not args.artist:
+            parser.error("--info-overlay requires --artist")
 
     # Default to youtube-shorts format when --shorts is used without --format
     format_name = args.format_name
@@ -135,6 +189,13 @@ def main() -> None:
             transitions=args.transitions,
             transition_rate=args.transition_rate,
             transition_duration=args.transition_duration,
+            title=args.title,
+            artist=args.artist,
+            album=args.album,
+            title_card=args.title_card,
+            title_card_duration=args.title_card_duration,
+            info_overlay=args.info_overlay,
+            info_overlay_duration=args.info_overlay_duration,
         )
         if isinstance(result, list):
             for p in result:

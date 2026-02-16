@@ -45,6 +45,13 @@ uv run radiostar-killer ./my-clips ./song.wav -o music-video.mp4 --seed 42
 | `--transitions` | off | Apply transition effects between clips |
 | `--transition-rate` | `1.0` | Proportion of clip boundaries with transitions (0.0–1.0) |
 | `--transition-duration` | `0.3` | Transition overlap in seconds |
+| `--title` | — | Song title (required for `--title-card` and `--info-overlay`) |
+| `--artist` | — | Artist name (required for `--info-overlay`) |
+| `--album` | — | Album name (optional, shown in info overlay) |
+| `--title-card` | off | Add an opening title card |
+| `--title-card-duration` | `3.5` | Title card duration in seconds (snapped to nearest beat) |
+| `--info-overlay` | off | Add an MTV/VH1-style song info overlay |
+| `--info-overlay-duration` | `8.0` | Info overlay display duration in seconds |
 
 ### Format Presets
 
@@ -108,6 +115,33 @@ uv run radiostar-killer ./clips ./song.wav --effects --transitions --seed 42
 ```
 
 Both flags combine with `--seed` for reproducible output. Effects and transitions work with all format presets and with `--shorts`.
+
+### Title Card and Info Overlay
+
+Add a full-screen opening title card and/or an MTV/VH1-style song info overlay in the bottom-left corner. Music plays during the title card (standard music video convention). The title card duration is automatically snapped to the nearest beat for a clean transition.
+
+```bash
+# Title card only
+uv run radiostar-killer ./clips ./song.wav --title "Video Killed the Radio Star" --artist "The Buggles" --title-card
+
+# Info overlay only
+uv run radiostar-killer ./clips ./song.wav --title "Video Killed the Radio Star" --artist "The Buggles" --info-overlay
+
+# Both with album info
+uv run radiostar-killer ./clips ./song.wav \
+  --title "Video Killed the Radio Star" \
+  --artist "The Buggles" \
+  --album "The Age of Plastic" \
+  --title-card --info-overlay
+
+# Custom durations
+uv run radiostar-killer ./clips ./song.wav \
+  --title "My Song" --artist "My Band" \
+  --title-card --title-card-duration 5.0 \
+  --info-overlay --info-overlay-duration 10.0
+```
+
+Both features work with all format presets, `--shorts`, effects, and transitions.
 
 ## How it works
 
