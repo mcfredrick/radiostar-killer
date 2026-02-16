@@ -1,5 +1,9 @@
 # radiostar-killer
 
+<p align="center">
+  <img src="assets/banner.png" alt="radiostar-killer" width="600">
+</p>
+
 Generate music videos by syncing video clips to audio beats. Point it at a folder of video clips and an audio file, and it'll analyze the beat structure, chop and assign clips to beat groups, and export a beat-synced MP4.
 
 ## Install
