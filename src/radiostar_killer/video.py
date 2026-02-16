@@ -18,6 +18,33 @@ from radiostar_killer.effects import (
 from radiostar_killer.formats import FormatPreset
 
 
+def _resize_crop(
+    clip: VideoFileClip,
+    target_w: int,
+    target_h: int,
+) -> VideoFileClip:
+    """Resize clip to cover target resolution, then center-crop to fit.
+
+    Preserves aspect ratio by scaling to fill (no black bars, no stretching),
+    then cropping the excess from the center.
+    """
+    src_w, src_h = clip.size
+    scale = max(target_w / src_w, target_h / src_h)
+    clip = clip.resized(scale)
+
+    # Center-crop to exact target
+    cur_w, cur_h = clip.size
+    x_center = cur_w / 2
+    y_center = cur_h / 2
+    clip = clip.cropped(
+        x1=x_center - target_w / 2,
+        y1=y_center - target_h / 2,
+        x2=x_center + target_w / 2,
+        y2=y_center + target_h / 2,
+    )
+    return clip
+
+
 def prepare_clip(
     path: Path,
     target_duration: float,
@@ -45,7 +72,7 @@ def prepare_clip(
         clip = concatenate_videoclips([clip] * n_loops)
         clip = clip.subclipped(0, target_duration)
 
-    clip = clip.resized(resolution)
+    clip = _resize_crop(clip, *resolution)
     clip = clip.with_fps(fps)
     return clip
 
