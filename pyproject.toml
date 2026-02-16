@@ -1,0 +1,52 @@
+[project]
+name = "radiostar-killer"
+version = "0.1.0"
+description = "Generate music videos by syncing video clips to audio beats"
+readme = "README.md"
+authors = [
+    { name = "Matt Fredrick", email = "49464742+mcfredrick@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "moviepy>=2.0",
+    "librosa>=0.10",
+    "numpy",
+    "scipy",
+    "numba<0.63",
+    "llvmlite<0.46",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "pylint",
+    "mypy",
+    "pytest",
+]
+
+[project.scripts]
+radiostar-killer = "radiostar_killer.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end tests (may be slow)",
+]
