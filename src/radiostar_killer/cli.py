@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from radiostar_killer.formats import PRESETS, resolve_format
 from radiostar_killer.main import run
 
 
@@ -55,28 +56,56 @@ def main() -> None:
     parser.add_argument(
         "--resolution",
         type=parse_resolution,
-        default=(1920, 1080),
-        help="Output resolution as WIDTHxHEIGHT (default: 1920x1080)",
+        default=None,
+        help="Output resolution as WIDTHxHEIGHT (overrides format preset)",
     )
     parser.add_argument(
         "--fps",
         type=int,
-        default=30,
-        help="Output frames per second (default: 30)",
+        default=None,
+        help="Output frames per second (overrides format preset)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=sorted(PRESETS),
+        default=None,
+        dest="format_name",
+        help="Output format preset (default: youtube)",
+    )
+    parser.add_argument(
+        "--shorts",
+        action="store_true",
+        help="Generate 3 YouTube Shorts from the most energetic sections",
+    )
+    parser.add_argument(
+        "--short-duration",
+        type=float,
+        default=60.0,
+        help="Duration in seconds for each short (default: 60)",
     )
 
     args = parser.parse_args()
 
+    # Default to youtube-shorts format when --shorts is used without --format
+    format_name = args.format_name
+    if args.shorts and format_name is None:
+        format_name = "youtube-shorts"
+
     try:
-        run(
+        preset = resolve_format(format_name, args.resolution, args.fps)
+        result = run(
             clips_dir=args.clips_dir,
             audio_file=args.audio_file,
             output=args.output,
             min_beats=args.min_beats,
             seed=args.seed,
-            resolution=args.resolution,
-            fps=args.fps,
+            preset=preset,
+            shorts=args.shorts,
+            short_duration=args.short_duration,
         )
+        if isinstance(result, list):
+            for p in result:
+                print(f"  {p}")
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

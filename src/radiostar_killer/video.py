@@ -10,6 +10,7 @@ from moviepy import (
 )
 
 from radiostar_killer.clips import ClipAssignment
+from radiostar_killer.formats import FormatPreset
 
 
 def prepare_clip(
@@ -48,24 +49,27 @@ def build_video(
     assignments: list[ClipAssignment],
     audio_path: Path | str,
     output_path: Path | str,
-    resolution: tuple[int, int],
-    fps: int,
+    preset: FormatPreset,
     seed: int | None = None,
+    audio_start: float = 0.0,
+    audio_end: float | None = None,
 ) -> Path:
     """Build the final beat-synced video from clip assignments.
 
     Prepares each clip, concatenates them, overlays the audio, and exports.
+    When audio_start/audio_end are set, trims the audio to that range.
     """
     rng = random.Random(seed)
     output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     prepared = []
     for assignment in assignments:
         clip = prepare_clip(
             assignment.path,
             assignment.target_duration,
-            resolution,
-            fps,
+            preset.resolution,
+            preset.fps,
             rng,
         )
         prepared.append(clip)
@@ -73,18 +77,32 @@ def build_video(
     final = concatenate_videoclips(prepared, method="compose")
 
     audio = AudioFileClip(str(audio_path))
+    # Trim audio to the specified range if set
+    if audio_start > 0.0 or audio_end is not None:
+        end = audio_end if audio_end is not None else audio.duration
+        audio = audio.subclipped(audio_start, end)
     # Trim audio to match video length if needed
     if audio.duration > final.duration:
         audio = audio.subclipped(0, final.duration)
     final = final.with_audio(audio)
 
-    final.write_videofile(
-        str(output_path),
-        codec="libx264",
-        audio_codec="aac",
-        fps=fps,
-        logger="bar",
-    )
+    # Build ffmpeg params from preset
+    ffmpeg_params: list[str] = []
+    if preset.bitrate:
+        ffmpeg_params.extend(["-b:v", preset.bitrate])
+
+    write_kwargs: dict[str, object] = {
+        "codec": preset.codec,
+        "audio_codec": preset.audio_codec,
+        "fps": preset.fps,
+        "logger": "bar",
+    }
+    if preset.audio_bitrate:
+        write_kwargs["audio_bitrate"] = preset.audio_bitrate
+    if ffmpeg_params:
+        write_kwargs["ffmpeg_params"] = ffmpeg_params
+
+    final.write_videofile(str(output_path), **write_kwargs)  # type: ignore[arg-type]
 
     # Clean up
     for clip in prepared:

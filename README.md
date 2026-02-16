@@ -35,8 +35,54 @@ uv run radiostar-killer ./my-clips ./song.wav -o music-video.mp4 --seed 42
 | `-o`, `--output` | `output.mp4` | Output file path |
 | `--min-beats` | `2` | Minimum beats per group |
 | `--seed` | random | Seed for reproducible clip ordering and trimming |
-| `--resolution` | `1920x1080` | Output resolution (`WIDTHxHEIGHT`) |
-| `--fps` | `30` | Output frames per second |
+| `--resolution` | from preset | Output resolution (`WIDTHxHEIGHT`), overrides the format preset |
+| `--fps` | from preset | Output frames per second, overrides the format preset |
+| `--format` | `youtube` | Output format preset (see [Format Presets](#format-presets)) |
+| `--shorts` | off | Generate 3 YouTube Shorts from the most energetic sections |
+| `--short-duration` | `60` | Duration in seconds for each short |
+
+### Format Presets
+
+Use `--format` to target a specific platform. Each preset configures resolution, FPS, and encoding settings so the output is ready to upload without re-encoding.
+
+| Preset | Resolution | Orientation | Bitrate | Notes |
+|--------|-----------|-------------|---------|-------|
+| `youtube` | 1920x1080 | Landscape (16:9) | default | Default preset |
+| `youtube-shorts` | 1080x1920 | Portrait (9:16) | default | Max 180s |
+| `tiktok` | 1080x1920 | Portrait (9:16) | 12M video, 256k audio | |
+| `instagram-reels` | 1080x1920 | Portrait (9:16) | 3500k video, 128k audio | |
+
+```bash
+# Export for TikTok
+uv run radiostar-killer ./clips ./song.wav -o tiktok_video.mp4 --format tiktok
+
+# Export for Instagram Reels
+uv run radiostar-killer ./clips ./song.wav -o reel.mp4 --format instagram-reels
+
+# Override a preset's resolution (e.g. 720p YouTube)
+uv run radiostar-killer ./clips ./song.wav --format youtube --resolution 1280x720
+```
+
+### YouTube Shorts Generation
+
+Use `--shorts` to automatically generate up to 3 short videos from the most energetic parts of the song. The CLI analyzes RMS energy across the audio and picks the top non-overlapping high-energy sections.
+
+```bash
+# Generate 3 x 60-second shorts (default)
+uv run radiostar-killer ./clips ./song.wav --shorts
+
+# Generate 3 x 45-second shorts
+uv run radiostar-killer ./clips ./song.wav --shorts --short-duration 45
+
+# Shorts with a specific output stem (produces output_short_1.mp4, output_short_2.mp4, ...)
+uv run radiostar-killer ./clips ./song.wav --shorts -o output.mp4
+```
+
+When `--shorts` is used:
+- The format defaults to `youtube-shorts` (1080x1920 portrait) unless overridden with `--format`
+- No full-length video is generated — only the shorts
+- Output files are named `{stem}_short_1.mp4`, `{stem}_short_2.mp4`, `{stem}_short_3.mp4`
+- If the audio is too short to produce 3 non-overlapping sections, fewer shorts are generated
 
 ## How it works
 

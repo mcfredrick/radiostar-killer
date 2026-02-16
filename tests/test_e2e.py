@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from moviepy import VideoFileClip
 
+from radiostar_killer.formats import FormatPreset
 from radiostar_killer.main import run
 
 
@@ -14,6 +15,11 @@ class TestEndToEnd:
         self, tmp_clips_dir: Path, tmp_audio_file: Path, tmp_path: Path
     ):
         output = tmp_path / "output.mp4"
+        preset = FormatPreset(
+            name="test",
+            resolution=(320, 240),
+            fps=10,
+        )
 
         result = run(
             clips_dir=tmp_clips_dir,
@@ -21,8 +27,7 @@ class TestEndToEnd:
             output=output,
             min_beats=2,
             seed=42,
-            resolution=(320, 240),
-            fps=10,
+            preset=preset,
         )
 
         assert result == output
