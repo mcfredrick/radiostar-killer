@@ -16,12 +16,14 @@ from radiostar_killer.splitscreen import (
     SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY,
     LAYOUT_GRID,
     LAYOUT_RADIAL,
+    PANEL_CONTRAST_RATE,
     PANEL_EFFECT_RATE,
     PANEL_MODE_DIFFERENT,
     PANEL_MODE_SAME_CLIP,
     PANEL_MODE_SAME_PARTS,
     ClimaxBurstConfig,
     SplitScreenConfig,
+    _apply_contrast_tints,
     _apply_panel_effects,
     _compose_radial,
     _panel_cells,
@@ -449,6 +451,10 @@ def test_panel_effect_rate_in_range() -> None:
     assert 0.0 <= PANEL_EFFECT_RATE <= 1.0
 
 
+def test_panel_contrast_rate_in_range() -> None:
+    assert 0.0 <= PANEL_CONTRAST_RATE <= 1.0
+
+
 def test_apply_panel_effects_preserves_count() -> None:
     clips = [_color_clip() for _ in range(4)]
     rng = random.Random(0)
@@ -456,6 +462,27 @@ def test_apply_panel_effects_preserves_count() -> None:
     assert len(result) == 4
     for clip in result:
         assert clip.size == RESOLUTION
+
+
+def test_apply_contrast_tints_preserves_count_and_size() -> None:
+    clips = [_color_clip() for _ in range(6)]
+    rng = random.Random(0)
+    result = _apply_contrast_tints(clips, rng)
+    assert len(result) == 6
+    for clip in result:
+        assert clip.size == RESOLUTION
+
+
+def test_apply_contrast_tints_produces_different_colors() -> None:
+    # Render a single frame from each tinted panel and verify not all identical.
+    # Uses a white clip so the tint factors are clearly visible.
+    clips = [_color_clip(color=(200, 200, 200)) for _ in range(4)]
+    rng = random.Random(7)
+    result = _apply_contrast_tints(clips, rng)
+    frames = [r.get_frame(0) for r in result]
+    # At least two panels should have a different mean color
+    means = [f.mean(axis=(0, 1)) for f in frames]
+    assert not all(np.allclose(m, means[0], atol=5) for m in means[1:])
 
 
 def test_inject_split_screens_with_mixed_modes_no_crash() -> None:

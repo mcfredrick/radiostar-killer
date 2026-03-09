@@ -32,6 +32,11 @@ def _apply_randomize(args: argparse.Namespace) -> None:
 
     Boolean flags are randomized if not already enabled. Numeric params are
     randomized if they were not explicitly passed (i.e. still None).
+
+    NEW FLAG CHECKLIST: when adding a new visual feature flag, decide here:
+      - Should --randomize randomly enable it? Add an `if not args.X` block.
+      - Does it have a numeric tuning param? Add it to _apply_defaults too.
+      - Should it appear in the reproduce command? Add it to _build_reproduce_command.
     """
     rng = random.Random()  # fully random — no seed, output is always printed
 
@@ -61,7 +66,8 @@ def _apply_defaults(args: argparse.Namespace) -> None:
     """Fill in None numeric visual params with their defaults.
 
     Runs after _apply_randomize (or instead of it) to ensure no None values
-    reach run().
+    reach run(). Add an entry here for any new numeric flag whose default
+    is deferred (i.e. registered with default=None in argparse).
     """
     if args.effect_rate is None:
         args.effect_rate = _EFFECT_RATE_DEFAULT
@@ -74,7 +80,10 @@ def _apply_defaults(args: argparse.Namespace) -> None:
 
 
 def _build_reproduce_command(args: argparse.Namespace) -> str:
-    """Build a fully-specified CLI command that reproduces the current run."""
+    """Build a fully-specified CLI command that reproduces the current run.
+
+    Add new visual feature flags here so --randomize prints a complete command.
+    """
     parts = ["radiostar-killer", str(args.clips_dir), str(args.audio_file)]
 
     parts += ["-o", str(args.output)]
@@ -191,6 +200,8 @@ def main() -> None:
         default=60.0,
         help="Duration in seconds for each short (default: 60)",
     )
+    # --- Visual feature flags ---
+    # When adding a new flag here, work through the checklist in _apply_randomize.
     parser.add_argument(
         "--randomize",
         action="store_true",

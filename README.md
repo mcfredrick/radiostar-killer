@@ -167,6 +167,15 @@ uv run radiostar-killer ./clips ./song.wav --climax-burst
 uv run radiostar-killer ./clips ./song.wav --split-screen --climax-burst
 ```
 
+#### Panel Effects and Contrast
+
+When split screen or climax burst is active, each panel is automatically treated to make it visually distinct:
+
+- **Contrast mode** (50% of split screens): each panel gets a different color tint from a curated palette — warm/orange, cool/blue, green, magenta/purple, or neutral — so adjacent panels always read as clearly separate.
+- **Random effects mode** (the other 50%): each panel independently rolls for a random visual effect (gamma, blur, color tint, mirror, etc.) at a 35% rate per panel.
+
+Both modes normalize clip frames to uint8 before applying effects, so they work with any clip source.
+
 ### Randomize
 
 Use `--randomize` to let the tool randomly enable visual features (`--effects`, `--transitions`, `--split-screen`, `--climax-burst`) and their tuning parameters. Any flags you pass explicitly are respected — only unset flags are randomized.
@@ -205,3 +214,39 @@ uv run ruff check src/ tests/
 # Type checking
 uv run mypy src/
 ```
+
+### Effect Testing Script
+
+`scripts/test_effect.py` lets you preview any individual effect, split screen layout, or climax burst on real clips without running the full pipeline.
+
+```bash
+# List all available effects
+uv run scripts/test_effect.py --list
+
+# Apply a single effect to all clips
+uv run scripts/test_effect.py --clips ./my-clips --effect mirror_x
+uv run scripts/test_effect.py --clips ./my-clips --effect blur --output test_blur.mp4
+
+# Preview a split screen layout
+uv run scripts/test_effect.py --clips ./my-clips --effect splitscreen-4
+uv run scripts/test_effect.py --clips ./my-clips --effect splitscreen-4 --layout radial
+
+# Force contrast tint mode (each panel gets a distinct color cast)
+uv run scripts/test_effect.py --clips ./my-clips --effect splitscreen-4 --contrast
+
+# Force random per-panel effects (disable contrast mode)
+uv run scripts/test_effect.py --clips ./my-clips --effect splitscreen-4 --no-contrast
+
+# Set probability that each panel gets a random effect (0.0–1.0)
+uv run scripts/test_effect.py --clips ./my-clips --effect splitscreen-6 --panel-effect-rate 1.0
+
+# Climax burst at a specific tempo
+uv run scripts/test_effect.py --clips ./my-clips --effect climax-burst --tempo 95
+uv run scripts/test_effect.py --clips ./my-clips --effect climax-burst --double-time
+uv run scripts/test_effect.py --clips ./my-clips --effect climax-burst --no-double-time
+
+# Reproducible output
+uv run scripts/test_effect.py --clips ./my-clips --effect splitscreen-4 --seed 7
+```
+
+Flags that accept `--flag` / `--no-flag` / _(omit for random)_ — `--contrast`, `--double-time` — default to `None`, which lets the library's built-in probability decide. Omit them to see the natural random behaviour; use `--flag` or `--no-flag` to force a specific path.

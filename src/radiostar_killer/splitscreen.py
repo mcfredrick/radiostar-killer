@@ -62,6 +62,19 @@ SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY: float = 0.50
 # Probability that any individual panel in a split screen gets a random filter
 PANEL_EFFECT_RATE: float = 0.35
 
+# Probability that a split screen uses coordinated contrast tints (vs random per-panel effects)
+PANEL_CONTRAST_RATE: float = 0.50
+
+# Predefined (r, g, b) channel multipliers for contrast tinting.
+# Shuffled and assigned one-per-panel so adjacent panels always look distinct.
+_CONTRAST_PALETTE: list[tuple[float, float, float]] = [
+    (1.30, 0.85, 0.65),  # warm / orange
+    (0.65, 0.85, 1.30),  # cool / blue
+    (0.70, 1.30, 0.70),  # green
+    (1.20, 0.65, 1.20),  # magenta / purple
+    (1.00, 1.00, 1.00),  # natural (no tint)
+]
+
 
 @dataclass(frozen=True)
 class SplitScreenConfig:
@@ -214,16 +227,46 @@ def _compose_radial(
     return VideoClip(make_frame, duration=target_duration).with_fps(fps)
 
 
+def _tint_clip(clip: VideoClip, r: float, g: float, b: float) -> VideoClip:
+    """Multiply each RGB channel by the given factor."""
+    factors = np.array([r, g, b], dtype=np.float64)
+
+    def apply(get_frame: object, t: float) -> np.ndarray:
+        return np.clip(get_frame(t).astype(np.float64) * factors, 0, 255).astype(np.uint8)  # type: ignore[no-any-return]
+
+    return clip.transform(apply)
+
+
+def _apply_contrast_tints(clips: list[VideoClip], rng: random.Random) -> list[VideoClip]:
+    """Assign a different contrasting color tint to each panel.
+
+    Shuffles _CONTRAST_PALETTE and cycles through it so adjacent panels
+    always have a distinct color cast.
+    """
+    palette = list(_CONTRAST_PALETTE)
+    rng.shuffle(palette)
+    return [_tint_clip(c, *palette[i % len(palette)]) for i, c in enumerate(clips)]
+
+
 def _apply_panel_effects(
     clips: list[VideoClip],
     rng: random.Random,
     rate: float = PANEL_EFFECT_RATE,
+    contrast: bool | None = None,
 ) -> list[VideoClip]:
-    """Apply a random effect to each panel clip independently at the given rate.
+    """Apply visual differentiation to split-screen panels.
 
-    Clips are normalized to uint8 first so PIL-based effects (e.g. Painting)
-    work regardless of the source clip's internal frame dtype.
+    Pass contrast=True to force coordinated palette tints, contrast=False to
+    force random per-panel effects, or None (default) to decide randomly based
+    on PANEL_CONTRAST_RATE.
+
+    Clips are normalized to uint8 first so PIL-based effects work regardless
+    of the source clip's internal frame dtype.
     """
+    use_contrast = (rng.random() < PANEL_CONTRAST_RATE) if contrast is None else contrast
+    if use_contrast:
+        return _apply_contrast_tints(clips, rng)
+
     def to_uint8(get_frame: object, t: float) -> np.ndarray:
         return get_frame(t).astype(np.uint8)  # type: ignore[no-any-return]
 

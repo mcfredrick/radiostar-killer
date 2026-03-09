@@ -11,6 +11,7 @@ Usage examples:
 """
 
 import argparse
+import inspect
 import random
 import sys
 from pathlib import Path
@@ -35,6 +36,22 @@ DEFAULT_TEMPO = 120.0
 
 SPLITSCREEN_PANELS = {"splitscreen-2": 2, "splitscreen-4": 4, "splitscreen-6": 6}
 ALL_EFFECTS = sorted(list(BUILTIN_NAMED) + list(CUSTOM_NAMED) + list(SPLITSCREEN_PANELS) + ["climax-burst"])
+
+
+def _kwargs_for(func: object, args: argparse.Namespace) -> dict[str, object]:
+    """Return kwargs to forward from argparse args to func.
+
+    Matches optional keyword parameters (those with defaults) by name against
+    attributes in the argparse namespace. Adding a new --my-flag arg and a
+    matching my_flag=None parameter to the target function is all that's needed
+    — no manual wiring required.
+    """
+    sig = inspect.signature(func)  # type: ignore[arg-type]
+    return {
+        name: getattr(args, name)
+        for name, param in sig.parameters.items()
+        if param.default is not inspect.Parameter.empty and hasattr(args, name)
+    }
 
 
 def _load_clips(clips_dir: Path) -> list[Path]:
@@ -82,6 +99,8 @@ def main() -> None:
     parser.add_argument("--double-time", action=argparse.BooleanOptionalAction, default=None, help="Force double-time for climax-burst (default: random 70%%)")
     parser.add_argument("--panel-effect-rate", type=float, default=PANEL_EFFECT_RATE,
                         help=f"Probability each split-screen panel gets a random filter (default: {PANEL_EFFECT_RATE})")
+    parser.add_argument("--contrast", action=argparse.BooleanOptionalAction, default=None,
+                        help="Force contrast tint mode for split-screen panels (default: random)")
     parser.add_argument("--seed", type=int, default=SEED, help="RNG seed for reproducible results")
     parser.add_argument("--list", action="store_true", help="List all available effects and exit")
     args = parser.parse_args()
@@ -107,17 +126,18 @@ def main() -> None:
         print(f"Building climax burst (tempo={args.tempo} BPM) from {len(clip_paths)} clip(s)...")
         pool = [_prepare(p, args.duration) for p in clip_paths]
         result = build_climax_burst(pool, args.tempo, RESOLUTION, FPS, rng,
-                                    layout=args.layout, double_time=args.double_time)
+                                    **_kwargs_for(build_climax_burst, args))
 
     # Split screen: need exactly N clips
     elif args.effect in SPLITSCREEN_PANELS:
         panels = SPLITSCREEN_PANELS[args.effect]
         # Cycle paths to get exactly `panels` clips
         selected = [clip_paths[i % len(clip_paths)] for i in range(panels)]
-        print(f"Compositing {panels}-panel split screen from {len(selected)} clips "
-              f"(panel-effect-rate={args.panel_effect_rate})...")
+        mode = "contrast" if args.contrast else ("random effects" if args.contrast is False else "random mode")
+        print(f"Compositing {panels}-panel split screen from {len(selected)} clips ({mode})...")
         loaded = [_prepare(p, args.duration) for p in selected]
-        loaded = _apply_panel_effects(loaded, rng, rate=args.panel_effect_rate)
+        loaded = _apply_panel_effects(loaded, rng, rate=args.panel_effect_rate,
+                                      **_kwargs_for(_apply_panel_effects, args))
         result = compose_split_screen(loaded, RESOLUTION, FPS, layout=args.layout or "grid")
     else:
         # Per-clip effect: apply to every clip, then concatenate
