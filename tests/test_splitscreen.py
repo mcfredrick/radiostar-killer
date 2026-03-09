@@ -309,41 +309,47 @@ def test_inject_climax_burst_noop_when_too_few_clips() -> None:
 def test_select_panel_clips_different_count() -> None:
     pool = [_color_clip(1.0, c) for c in [(255, 0, 0), (0, 255, 0), (0, 0, 255)]]
     rng = random.Random(0)
-    result = _select_panel_clips(pool, 4, rng, mode=PANEL_MODE_DIFFERENT)
+    result, source_ids = _select_panel_clips(pool, 4, rng, mode=PANEL_MODE_DIFFERENT)
     assert len(result) == 4
+    assert len(source_ids) == 4
 
 
 def test_select_panel_clips_same_clip_all_identical() -> None:
     pool = [_color_clip(1.0, c) for c in [(255, 0, 0), (0, 255, 0), (0, 0, 255)]]
     rng = random.Random(0)
-    result = _select_panel_clips(pool, 4, rng, mode=PANEL_MODE_SAME_CLIP)
+    result, source_ids = _select_panel_clips(pool, 4, rng, mode=PANEL_MODE_SAME_CLIP)
     assert len(result) == 4
-    # All entries are the same object
+    # All entries are the same object and share one source id
     assert all(c is result[0] for c in result)
+    assert len(set(source_ids)) == 1
 
 
 def test_select_panel_clips_same_parts_count_and_duration() -> None:
     pool = [_color_clip(2.0)]
     rng = random.Random(0)
     target = 0.5
-    result = _select_panel_clips(pool, 4, rng, target_duration=target, mode=PANEL_MODE_SAME_PARTS)
+    result, source_ids = _select_panel_clips(pool, 4, rng, target_duration=target, mode=PANEL_MODE_SAME_PARTS)
     assert len(result) == 4
     for clip in result:
         assert abs(clip.duration - target) < 0.05
+    # All panels derive from the same base clip
+    assert len(set(source_ids)) == 1
 
 
 def test_select_panel_clips_same_parts_returns_correct_count() -> None:
     pool = [_color_clip(4.0, (128, 64, 32))]
     rng = random.Random(0)
-    result = _select_panel_clips(pool, 3, rng, target_duration=1.0, mode=PANEL_MODE_SAME_PARTS)
+    result, source_ids = _select_panel_clips(pool, 3, rng, target_duration=1.0, mode=PANEL_MODE_SAME_PARTS)
     assert len(result) == 3
+    assert len(source_ids) == 3
 
 
 def test_select_panel_clips_random_mode_returns_correct_count() -> None:
     pool = [_color_clip() for _ in range(3)]
     rng = random.Random(42)
-    result = _select_panel_clips(pool, 2, rng)
+    result, source_ids = _select_panel_clips(pool, 2, rng)
     assert len(result) == 2
+    assert len(source_ids) == 2
 
 
 # --- radial layout ---
@@ -462,6 +468,28 @@ def test_apply_panel_effects_preserves_count() -> None:
     assert len(result) == 4
     for clip in result:
         assert clip.size == RESOLUTION
+
+
+def test_apply_panel_effects_same_source_distinct_filters() -> None:
+    # Panels sharing a source_id must receive distinct effects (no two get the same filter)
+    clip = _color_clip(color=(200, 200, 200))
+    clips = [clip, clip, clip, clip]
+    source_ids = [id(clip)] * 4
+    rng = random.Random(0)
+    result = _apply_panel_effects(clips, rng, contrast=False, source_ids=source_ids)
+    assert len(result) == 4
+    for r in result:
+        assert r.size == RESOLUTION
+
+
+def test_apply_panel_effects_different_sources_use_rate() -> None:
+    # Panels with distinct source_ids use the standard rate-based path
+    clips = [_color_clip() for _ in range(4)]
+    source_ids = [id(c) for c in clips]  # all different
+    rng = random.Random(0)
+    result = _apply_panel_effects(clips, rng, rate=0.0, contrast=False, source_ids=source_ids)
+    # rate=0.0 → no effects applied, so output clips should be the same count
+    assert len(result) == 4
 
 
 def test_apply_contrast_tints_preserves_count_and_size() -> None:

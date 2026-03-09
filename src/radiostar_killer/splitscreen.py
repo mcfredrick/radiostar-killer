@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 from moviepy import CompositeVideoClip, VideoClip, concatenate_videoclips
 
-from radiostar_killer.effects import apply_random_effect
+from radiostar_killer.effects import apply_distinct_effects, apply_random_effect
 
 # ---------------------------------------------------------------------------
 # Climax burst constants — edit these to tune the feature
@@ -155,8 +155,11 @@ def _select_panel_clips(
     rng: random.Random,
     target_duration: float | None = None,
     mode: str | None = None,
-) -> list[VideoClip]:
-    """Return n_panels clips drawn from clips_pool using a randomly chosen mode.
+) -> tuple[list[VideoClip], list[int]]:
+    """Return (n_panels clips, source_ids) drawn from clips_pool using a randomly chosen mode.
+
+    source_ids[i] is the id() of the original source clip for panel i, enabling
+    callers to detect panels that share the same source and apply distinct effects.
 
     Modes:
       "different"  — pick n_panels clips independently at random (with replacement)
@@ -170,7 +173,7 @@ def _select_panel_clips(
 
     if mode == PANEL_MODE_SAME_CLIP:
         base = rng.choice(clips_pool)
-        return [base] * n_panels
+        return [base] * n_panels, [id(base)] * n_panels
 
     if mode == PANEL_MODE_SAME_PARTS:
         base = rng.choice(clips_pool)
@@ -182,10 +185,11 @@ def _select_panel_clips(
             start = i * offset_step
             looped = _loop_to_duration(base, start + dur)
             result.append(looped.subclipped(start, start + dur))
-        return result
+        return result, [id(base)] * n_panels
 
     # PANEL_MODE_DIFFERENT (default)
-    return rng.choices(clips_pool, k=n_panels)
+    clips = rng.choices(clips_pool, k=n_panels)
+    return clips, [id(c) for c in clips]
 
 
 def _compose_radial(
@@ -253,12 +257,17 @@ def _apply_panel_effects(
     rng: random.Random,
     rate: float = PANEL_EFFECT_RATE,
     contrast: bool | None = None,
+    source_ids: list[int] | None = None,
 ) -> list[VideoClip]:
     """Apply visual differentiation to split-screen panels.
 
     Pass contrast=True to force coordinated palette tints, contrast=False to
     force random per-panel effects, or None (default) to decide randomly based
     on PANEL_CONTRAST_RATE.
+
+    source_ids should be the list returned by _select_panel_clips. Panels that
+    share a source_id are guaranteed distinct effects (including "none") so the
+    same clip never appears identically filtered in two panels simultaneously.
 
     Clips are normalized to uint8 first so PIL-based effects work regardless
     of the source clip's internal frame dtype.
@@ -270,7 +279,27 @@ def _apply_panel_effects(
     def to_uint8(get_frame: object, t: float) -> np.ndarray:
         return get_frame(t).astype(np.uint8)  # type: ignore[no-any-return]
 
-    return [apply_random_effect(c.transform(to_uint8), rng, rate) for c in clips]
+    normalized = [c.transform(to_uint8) for c in clips]
+
+    # Group panel indices by source clip identity
+    ids = source_ids if source_ids is not None else [id(c) for c in clips]
+    groups: dict[int, list[int]] = {}
+    for i, src_id in enumerate(ids):
+        groups.setdefault(src_id, []).append(i)
+
+    result = list(normalized)
+    for indices in groups.values():
+        if len(indices) == 1:
+            i = indices[0]
+            result[i] = apply_random_effect(normalized[i], rng, rate)
+        else:
+            # Multiple panels share the same source — assign distinct effects so
+            # the same clip is never displayed with the same filter twice at once
+            group_clips = [normalized[i] for i in indices]
+            distinct = apply_distinct_effects(group_clips, rng)
+            for i, processed in zip(indices, distinct):
+                result[i] = processed
+    return result
 
 
 def compose_split_screen(
@@ -369,9 +398,9 @@ def inject_split_screens(
         target_dur = max(c.duration for c in pool)
         if rng.random() < SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY:
             target_dur /= 2
-        panel_clips = _select_panel_clips(pool, panels, rng, target_duration=target_dur)
+        panel_clips, source_ids = _select_panel_clips(pool, panels, rng, target_duration=target_dur)
         panel_clips = [_loop_to_duration(c, target_dur) for c in panel_clips]
-        panel_clips = _apply_panel_effects(panel_clips, rng)
+        panel_clips = _apply_panel_effects(panel_clips, rng, source_ids=source_ids)
         layout = rng.choices(LAYOUT_MODES, weights=LAYOUT_WEIGHTS, k=1)[0]
         composite = compose_split_screen(panel_clips, resolution, fps, layout=layout)
         result[start_idx : start_idx + panels] = [composite]
@@ -431,10 +460,10 @@ def build_climax_burst(
 
     steps: list[VideoClip] = []
     for n_panels in CLIMAX_PANEL_SEQUENCE:
-        panel_clips = _select_panel_clips(
+        panel_clips, source_ids = _select_panel_clips(
             clips_pool, n_panels, rng, target_duration=step_duration
         )
-        panel_clips = _apply_panel_effects(panel_clips, rng)
+        panel_clips = _apply_panel_effects(panel_clips, rng, source_ids=source_ids)
         sized = [_loop_to_duration(c, step_duration) for c in panel_clips]
         step_layout = layout or rng.choices(LAYOUT_MODES, weights=CLIMAX_LAYOUT_WEIGHTS, k=1)[0]
         steps.append(compose_split_screen(sized, resolution, fps, layout=step_layout))
