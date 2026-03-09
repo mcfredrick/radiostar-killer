@@ -12,6 +12,8 @@ from radiostar_killer.overlays import (
     TitleCardConfig,
     snap_to_nearest_beat,
 )
+from radiostar_killer.audio import find_peak_energy_time
+from radiostar_killer.splitscreen import ClimaxBurstConfig, SplitScreenConfig
 from radiostar_killer.video import build_video
 
 
@@ -36,6 +38,11 @@ def run(
     title_card_duration: float = 3.5,
     info_overlay: bool = False,
     info_overlay_duration: float = 8.0,
+    split_screen: bool = False,
+    split_screen_count: int = 2,
+    split_screen_panels: int | None = None,
+    climax_burst: bool = False,
+    fast: bool = False,
 ) -> Path | list[Path]:
     """Run the full music video generation pipeline.
 
@@ -52,6 +59,8 @@ def run(
     clip_paths = discover_clips(clips_dir)
     print(f"  Found {len(clip_paths)} clips")
 
+    if fast:
+        print("  Fast encoding enabled (ultrafast preset, max threads)")
     if effects:
         print(f"  Effects enabled (rate: {effect_rate:.0%})")
     if transitions:
@@ -79,6 +88,19 @@ def run(
             display_duration=info_overlay_duration,
         )
 
+    split_screen_config = None
+    if split_screen:
+        split_screen_config = SplitScreenConfig(
+            count=split_screen_count,
+            panels=split_screen_panels,
+        )
+        panels_label = str(split_screen_panels) if split_screen_panels else "random"
+        print(f"  Split screen: up to {split_screen_count} occurrences, panels={panels_label}")
+
+    # Climax burst is built per-path below (needs beat_groups), so just flag it here
+    if climax_burst:
+        print("  Climax burst: enabled (2→4→6→4→2 panels at peak energy)")
+
     if shorts:
         return _build_shorts(
             clips_dir=clips_dir,
@@ -96,12 +118,25 @@ def run(
             transition_duration=transition_duration,
             title_card_config=title_card_config,
             info_overlay_config=info_overlay_config,
+            split_screen_config=split_screen_config,
+            climax_burst=climax_burst,
+            fast=fast,
         )
 
     beat_groups = group_beats(audio_info.beat_times, audio_info.duration, min_beats)
     print(f"  Beat groups: {len(beat_groups)}")
 
     assignments = assign_clips_to_groups(clip_paths, beat_groups, seed)
+
+    climax_burst_config = None
+    if climax_burst:
+        peak_time = find_peak_energy_time(audio_file)
+        print(f"  Climax burst peak: {peak_time:.2f}s")
+        climax_burst_config = ClimaxBurstConfig(
+            climax_time=peak_time,
+            tempo=audio_info.tempo,
+            beat_groups=beat_groups,
+        )
 
     print(f"Building video: {output}")
     res = preset.resolution
@@ -119,6 +154,9 @@ def run(
         transition_duration=transition_duration,
         title_card_config=title_card_config,
         info_overlay_config=info_overlay_config,
+        split_screen_config=split_screen_config,
+        climax_burst_config=climax_burst_config,
+        fast=fast,
     )
 
     print(f"Done! Output: {result}")
@@ -141,6 +179,9 @@ def _build_shorts(
     transition_duration: float = 0.3,
     title_card_config: TitleCardConfig | None = None,
     info_overlay_config: InfoOverlayConfig | None = None,
+    split_screen_config: SplitScreenConfig | None = None,
+    climax_burst: bool = False,
+    fast: bool = False,
 ) -> list[Path]:
     """Build YouTube Shorts from the most energetic sections."""
     from radiostar_killer.audio import AudioInfo
@@ -180,6 +221,16 @@ def _build_shorts(
 
         assignments = assign_clips_to_groups(clip_paths, beat_groups, seed)
 
+        section_climax_config = None
+        if climax_burst:
+            # Use the section midpoint as the climax time within each short
+            section_mid = section.start + (section.end - section.start) / 2
+            section_climax_config = ClimaxBurstConfig(
+                climax_time=section_mid - section.start,  # relative to section
+                tempo=audio_info.tempo,
+                beat_groups=beat_groups,
+            )
+
         short_output = output.parent / f"{stem}_short_{i + 1}.mp4"
         print(f"  Output: {short_output}")
 
@@ -198,6 +249,9 @@ def _build_shorts(
             transition_duration=transition_duration,
             title_card_config=title_card_config,
             info_overlay_config=info_overlay_config,
+            split_screen_config=split_screen_config,
+            climax_burst_config=section_climax_config,
+            fast=fast,
         )
         output_paths.append(short_output)
 

@@ -83,6 +83,15 @@ class EnergySection:
     mean_energy: float
 
 
+def find_peak_energy_time(path: Path | str) -> float:
+    """Return the timestamp (in seconds) of the single highest-RMS frame."""
+    path = Path(path)
+    y, sr = librosa.load(str(path), sr=None)
+    rms = librosa.feature.rms(y=y)[0]
+    peak_frame = int(np.argmax(rms))
+    return float(librosa.frames_to_time(peak_frame, sr=sr))
+
+
 def analyze_energy(
     path: Path | str,
     window_duration: float = 60.0,

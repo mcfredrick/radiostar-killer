@@ -131,6 +131,35 @@ _CUSTOM_EFFECTS = [
 
 EFFECT_COUNT = len(_BUILTIN_EFFECTS) + len(_CUSTOM_EFFECTS)
 
+# Named effects for explicit testing and selection.
+# Builtin effects take (rng) and return an fx object; custom effects take (rng, clip) and return a clip.
+BUILTIN_NAMED: dict[str, object] = {
+    "gamma": _random_gamma,
+    "brightness": _random_brightness,
+    "contrast": _random_contrast,
+    "black_and_white": _black_and_white,
+    "invert": _invert_colors,
+    "mirror_x": _mirror_x,
+    "mirror_y": _mirror_y,
+    "painting": _random_painting,
+}
+
+CUSTOM_NAMED: dict[str, object] = {
+    "zoom_in": _make_zoom_in,
+    "blur": _make_blur,
+    "color_tint": _make_color_tint,
+}
+
+
+def apply_named_effect(name: str, clip: VideoClip, rng: random.Random) -> VideoClip:
+    """Apply a specific named effect to a clip. Raises KeyError for unknown names."""
+    if name in BUILTIN_NAMED:
+        effect = BUILTIN_NAMED[name](rng)  # type: ignore[operator]
+        return clip.with_effects([effect])
+    if name in CUSTOM_NAMED:
+        return CUSTOM_NAMED[name](rng, clip)  # type: ignore[operator]
+    raise KeyError(f"Unknown effect '{name}'. Available: {sorted(list(BUILTIN_NAMED) + list(CUSTOM_NAMED))}")
+
 
 def apply_random_effect(
     clip: VideoClip,

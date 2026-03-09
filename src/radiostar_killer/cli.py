@@ -152,6 +152,31 @@ def main() -> None:
         help="Info overlay display duration in seconds (default: 8.0)",
     )
     parser.add_argument(
+        "--climax-burst",
+        action="store_true",
+        help=(
+            "Inject a 2→4→6→4→2 split screen burst at the song's peak energy moment"
+        ),
+    )
+    parser.add_argument(
+        "--split-screen",
+        action="store_true",
+        help="Inject split screen moments showing 2, 4, or 6 clips simultaneously",
+    )
+    parser.add_argument(
+        "--split-screen-count",
+        type=int,
+        default=2,
+        help="Number of split screen occurrences to inject (default: 2, max recommended: 3)",
+    )
+    parser.add_argument(
+        "--split-screen-panels",
+        type=int,
+        choices=[2, 4, 6],
+        default=None,
+        help="Fixed panel count per split screen (2, 4, or 6; default: random per occurrence)",
+    )
+    parser.add_argument(
         "--fast",
         action="store_true",
         help="Use ultrafast encoding preset and max threads for faster export",
@@ -196,6 +221,11 @@ def main() -> None:
             title_card_duration=args.title_card_duration,
             info_overlay=args.info_overlay,
             info_overlay_duration=args.info_overlay_duration,
+            split_screen=args.split_screen,
+            split_screen_count=args.split_screen_count,
+            split_screen_panels=args.split_screen_panels,
+            climax_burst=args.climax_burst,
+            fast=args.fast,
         )
         if isinstance(result, list):
             for p in result:

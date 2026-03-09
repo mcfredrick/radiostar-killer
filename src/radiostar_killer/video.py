@@ -23,6 +23,13 @@ from radiostar_killer.overlays import (
     create_info_overlay,
     create_title_card,
 )
+from radiostar_killer.splitscreen import (
+    CLIMAX_PANEL_SEQUENCE,
+    ClimaxBurstConfig,
+    SplitScreenConfig,
+    inject_climax_burst,
+    inject_split_screens,
+)
 
 
 def _resize_crop(
@@ -99,6 +106,9 @@ def build_video(
     transition_duration: float = 0.3,
     title_card_config: TitleCardConfig | None = None,
     info_overlay_config: InfoOverlayConfig | None = None,
+    split_screen_config: SplitScreenConfig | None = None,
+    climax_burst_config: ClimaxBurstConfig | None = None,
+    fast: bool = False,
 ) -> Path:
     """Build the final beat-synced video from clip assignments.
 
@@ -122,6 +132,16 @@ def build_video(
         if effects:
             clip = apply_random_effect(clip, rng, effect_rate)
         prepared.append(clip)
+
+    if split_screen_config is not None and len(prepared) > 1:
+        prepared = inject_split_screens(
+            prepared, split_screen_config, preset.resolution, preset.fps, rng
+        )
+
+    if climax_burst_config is not None and len(prepared) >= len(CLIMAX_PANEL_SEQUENCE):
+        prepared = inject_climax_burst(
+            prepared, climax_burst_config, preset.resolution, preset.fps, rng
+        )
 
     if transitions and len(prepared) > 1:
         transition_specs = [
@@ -173,6 +193,8 @@ def build_video(
 
     # Build ffmpeg params from preset
     ffmpeg_params: list[str] = []
+    if fast:
+        ffmpeg_params.extend(["-preset", "ultrafast", "-threads", "0"])
     if preset.bitrate:
         ffmpeg_params.extend(["-b:v", preset.bitrate])
 
