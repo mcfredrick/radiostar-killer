@@ -11,14 +11,18 @@ from radiostar_killer.splitscreen import (
     BARS_PER_PANEL_SLOW,
     BEATS_PER_BAR,
     CLIMAX_PANEL_SEQUENCE,
+    DOUBLE_TIME_PROBABILITY,
     FAST_TEMPO_THRESHOLD_BPM,
+    SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY,
     LAYOUT_GRID,
     LAYOUT_RADIAL,
+    PANEL_EFFECT_RATE,
     PANEL_MODE_DIFFERENT,
     PANEL_MODE_SAME_CLIP,
     PANEL_MODE_SAME_PARTS,
     ClimaxBurstConfig,
     SplitScreenConfig,
+    _apply_panel_effects,
     _compose_radial,
     _panel_cells,
     _select_panel_clips,
@@ -34,7 +38,8 @@ FPS = 10
 
 
 def _color_clip(duration: float = 1.0, color: tuple[int, int, int] = (255, 0, 0)) -> ColorClip:
-    return ColorClip(size=RESOLUTION, color=color, duration=duration).with_fps(FPS)
+    # Pass color as uint8 so PIL-based effects don't choke on int64 frames
+    return ColorClip(size=RESOLUTION, color=np.array(color, dtype=np.uint8), duration=duration).with_fps(FPS)
 
 
 # --- SplitScreenConfig ---
@@ -218,11 +223,13 @@ def test_build_climax_burst_resolution() -> None:
 
 
 def test_build_climax_burst_duration() -> None:
+    # double_time=False: verify normal-time total duration
     pool = [_color_clip(2.0) for _ in range(6)]
     rng = random.Random(0)
     tempo = 120.0
     step_dur = climax_panel_duration(tempo)
-    burst = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS, rng=rng)
+    burst = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS,
+                               rng=rng, double_time=False)
     expected = step_dur * len(CLIMAX_PANEL_SEQUENCE)
     assert abs(burst.duration - expected) < 0.2  # allow for small float rounding
 
@@ -367,6 +374,47 @@ def test_compose_split_screen_grid_vs_radial_both_correct_size() -> None:
     assert radial.size == RESOLUTION
 
 
+def test_double_time_probability_constant() -> None:
+    assert DOUBLE_TIME_PROBABILITY == 1.0  # climax burst always double-time by default
+
+
+def test_split_screen_double_time_probability_constant() -> None:
+    assert SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY == 0.50
+
+
+def test_build_climax_burst_double_time_shorter_duration() -> None:
+    pool = [_color_clip(2.0) for _ in range(4)]
+    rng = random.Random(0)
+    tempo = 120.0
+    normal = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS,
+                                rng=rng, layout=LAYOUT_GRID, double_time=False)
+    rng2 = random.Random(0)
+    fast = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS,
+                              rng=rng2, layout=LAYOUT_GRID, double_time=True)
+    assert fast.duration < normal.duration
+    assert abs(fast.duration - normal.duration / 2) < 0.2
+
+
+def test_build_climax_burst_double_time_correct_duration() -> None:
+    pool = [_color_clip(2.0) for _ in range(6)]
+    rng = random.Random(0)
+    tempo = 128.0
+    burst = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS,
+                               rng=rng, layout=LAYOUT_GRID, double_time=True)
+    expected = (climax_panel_duration(tempo) / 2) * len(CLIMAX_PANEL_SEQUENCE)
+    assert abs(burst.duration - expected) < 0.2
+
+
+def test_build_climax_burst_normal_time_correct_duration() -> None:
+    pool = [_color_clip(2.0) for _ in range(6)]
+    rng = random.Random(0)
+    tempo = 128.0
+    burst = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS,
+                               rng=rng, layout=LAYOUT_GRID, double_time=False)
+    expected = climax_panel_duration(tempo) * len(CLIMAX_PANEL_SEQUENCE)
+    assert abs(burst.duration - expected) < 0.2
+
+
 def test_build_climax_burst_radial_resolution() -> None:
     pool = [_color_clip(2.0, (255, 0, 0)), _color_clip(2.0, (0, 255, 0)),
             _color_clip(2.0, (0, 0, 255)), _color_clip(2.0, (255, 255, 0)),
@@ -382,7 +430,7 @@ def test_build_climax_burst_radial_duration() -> None:
     rng = random.Random(0)
     tempo = 128.0
     burst = build_climax_burst(pool, tempo=tempo, resolution=RESOLUTION, fps=FPS,
-                               rng=rng, layout=LAYOUT_RADIAL)
+                               rng=rng, layout=LAYOUT_RADIAL, double_time=False)
     expected = climax_panel_duration(tempo) * len(CLIMAX_PANEL_SEQUENCE)
     assert abs(burst.duration - expected) < 0.2
 
@@ -395,6 +443,19 @@ def test_build_climax_burst_radial_frame_is_valid() -> None:
                                rng=rng, layout=LAYOUT_RADIAL)
     frame = burst.get_frame(0)
     assert frame.shape == (RESOLUTION[1], RESOLUTION[0], 3)
+
+
+def test_panel_effect_rate_in_range() -> None:
+    assert 0.0 <= PANEL_EFFECT_RATE <= 1.0
+
+
+def test_apply_panel_effects_preserves_count() -> None:
+    clips = [_color_clip() for _ in range(4)]
+    rng = random.Random(0)
+    result = _apply_panel_effects(clips, rng, rate=1.0)  # always apply
+    assert len(result) == 4
+    for clip in result:
+        assert clip.size == RESOLUTION
 
 
 def test_inject_split_screens_with_mixed_modes_no_crash() -> None:

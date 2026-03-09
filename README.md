@@ -45,6 +45,11 @@ uv run radiostar-killer ./my-clips ./song.wav -o music-video.mp4 --seed 42
 | `--transitions` | off | Apply transition effects between clips |
 | `--transition-rate` | `1.0` | Proportion of clip boundaries with transitions (0.0–1.0) |
 | `--transition-duration` | `0.3` | Transition overlap in seconds |
+| `--split-screen` | off | Inject split screen moments (2, 4, or 6 clips) |
+| `--split-screen-count` | `2` | Number of split screen occurrences to inject (max recommended: 3) |
+| `--split-screen-panels` | random | Fixed panel count per split screen (`2`, `4`, or `6`); omit for random per occurrence |
+| `--climax-burst` | off | Inject a 2→4→6→4→2 panel burst at the song's peak energy moment |
+| `--randomize` | off | Randomly enable visual flags (see [Randomize](#randomize)) |
 | `--title` | — | Song title (required for `--title-card` and `--info-overlay`) |
 | `--artist` | — | Artist name (required for `--info-overlay`) |
 | `--album` | — | Album name (optional, shown in info overlay) |
@@ -52,6 +57,7 @@ uv run radiostar-killer ./my-clips ./song.wav -o music-video.mp4 --seed 42
 | `--title-card-duration` | `3.5` | Title card duration in seconds (snapped to nearest beat) |
 | `--info-overlay` | off | Add an MTV/VH1-style song info overlay |
 | `--info-overlay-duration` | `8.0` | Info overlay display duration in seconds |
+| `--fast` | off | Use ultrafast encoding and max threads for quicker export (lower quality) |
 
 ### Format Presets
 
@@ -142,6 +148,43 @@ uv run radiostar-killer ./clips ./song.wav \
 ```
 
 Both features work with all format presets, `--shorts`, effects, and transitions.
+
+### Split Screen and Climax Burst
+
+Use `--split-screen` to randomly inject moments where 2, 4, or 6 clips play simultaneously in a grid. Use `--climax-burst` to inject a dramatic 2→4→6→4→2 panel sequence at the song's peak energy moment.
+
+```bash
+# Random split screens (2 occurrences, random panel count)
+uv run radiostar-killer ./clips ./song.wav --split-screen
+
+# 3 occurrences, always 4 panels
+uv run radiostar-killer ./clips ./song.wav --split-screen --split-screen-count 3 --split-screen-panels 4
+
+# Climax burst only
+uv run radiostar-killer ./clips ./song.wav --climax-burst
+
+# Both together
+uv run radiostar-killer ./clips ./song.wav --split-screen --climax-burst
+```
+
+### Randomize
+
+Use `--randomize` to let the tool randomly enable visual features (`--effects`, `--transitions`, `--split-screen`, `--climax-burst`) and their tuning parameters. Any flags you pass explicitly are respected — only unset flags are randomized.
+
+Before processing starts, the tool prints which features were enabled and a fully-specified command you can copy-paste to reproduce the same output.
+
+```bash
+# Fully randomized
+uv run radiostar-killer ./clips ./song.wav --randomize
+
+# Lock in effects, randomize everything else
+uv run radiostar-killer ./clips ./song.wav --randomize --effects
+
+# Example output:
+# [randomize] Enabled: --effects, --transitions, --climax-burst
+# [randomize] Reproduce with:
+#   radiostar-killer ./clips ./song.wav -o output.mp4 --effects --effect-rate 0.65 --transitions --transition-rate 0.82 --transition-duration 0.34 --climax-burst
+```
 
 ## How it works
 

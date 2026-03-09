@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import numpy as np
 from moviepy import CompositeVideoClip, VideoClip, concatenate_videoclips
 
+from radiostar_killer.effects import apply_random_effect
+
 # ---------------------------------------------------------------------------
 # Climax burst constants — edit these to tune the feature
 # ---------------------------------------------------------------------------
@@ -50,6 +52,15 @@ LAYOUT_WEIGHTS: list[float] = [0.6, 0.4]
 
 # Climax burst weights — radial gets a higher share for visual impact
 CLIMAX_LAYOUT_WEIGHTS: list[float] = [0.3, 0.7]
+
+# Probability that the climax burst runs at double-time (step duration halved)
+DOUBLE_TIME_PROBABILITY: float = 1.0
+
+# Probability that a regular split screen runs at double-time
+SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY: float = 0.50
+
+# Probability that any individual panel in a split screen gets a random filter
+PANEL_EFFECT_RATE: float = 0.35
 
 
 @dataclass(frozen=True)
@@ -203,6 +214,22 @@ def _compose_radial(
     return VideoClip(make_frame, duration=target_duration).with_fps(fps)
 
 
+def _apply_panel_effects(
+    clips: list[VideoClip],
+    rng: random.Random,
+    rate: float = PANEL_EFFECT_RATE,
+) -> list[VideoClip]:
+    """Apply a random effect to each panel clip independently at the given rate.
+
+    Clips are normalized to uint8 first so PIL-based effects (e.g. Painting)
+    work regardless of the source clip's internal frame dtype.
+    """
+    def to_uint8(get_frame: object, t: float) -> np.ndarray:
+        return get_frame(t).astype(np.uint8)  # type: ignore[no-any-return]
+
+    return [apply_random_effect(c.transform(to_uint8), rng, rate) for c in clips]
+
+
 def compose_split_screen(
     clips: list[VideoClip],
     resolution: tuple[int, int],
@@ -297,7 +324,11 @@ def inject_split_screens(
     for start_idx, panels in sorted(selected, reverse=True):
         pool = result[start_idx : start_idx + panels]
         target_dur = max(c.duration for c in pool)
+        if rng.random() < SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY:
+            target_dur /= 2
         panel_clips = _select_panel_clips(pool, panels, rng, target_duration=target_dur)
+        panel_clips = [_loop_to_duration(c, target_dur) for c in panel_clips]
+        panel_clips = _apply_panel_effects(panel_clips, rng)
         layout = rng.choices(LAYOUT_MODES, weights=LAYOUT_WEIGHTS, k=1)[0]
         composite = compose_split_screen(panel_clips, resolution, fps, layout=layout)
         result[start_idx : start_idx + panels] = [composite]
@@ -336,22 +367,31 @@ def build_climax_burst(
     fps: int,
     rng: random.Random,
     layout: str | None = None,
+    double_time: bool | None = None,
 ) -> VideoClip:
     """Build the climax burst sequence defined by CLIMAX_PANEL_SEQUENCE.
 
     Each step independently picks a panel clip mode (different / same_clip /
     same_parts) and a layout (grid or radial, biased toward radial via
-    CLIMAX_LAYOUT_WEIGHTS). Steps are concatenated into a single clip.
+    CLIMAX_LAYOUT_WEIGHTS).
 
-    Pass layout explicitly to override random selection (useful for testing).
+    With probability DOUBLE_TIME_PROBABILITY the burst runs at double-time:
+    each step lasts half a normal step, creating a faster, more intense pulse.
+
+    Pass layout or double_time explicitly to override random selection (useful
+    for testing).
     """
+    use_double = rng.random() < DOUBLE_TIME_PROBABILITY if double_time is None else double_time
     step_duration = climax_panel_duration(tempo)
-    steps: list[VideoClip] = []
+    if use_double:
+        step_duration /= 2
 
+    steps: list[VideoClip] = []
     for n_panels in CLIMAX_PANEL_SEQUENCE:
         panel_clips = _select_panel_clips(
             clips_pool, n_panels, rng, target_duration=step_duration
         )
+        panel_clips = _apply_panel_effects(panel_clips, rng)
         sized = [_loop_to_duration(c, step_duration) for c in panel_clips]
         step_layout = layout or rng.choices(LAYOUT_MODES, weights=CLIMAX_LAYOUT_WEIGHTS, k=1)[0]
         steps.append(compose_split_screen(sized, resolution, fps, layout=step_layout))

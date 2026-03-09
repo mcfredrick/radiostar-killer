@@ -78,7 +78,7 @@ def _make_zoom_in(rng: random.Random, clip: VideoClip) -> VideoClip:
         y_start = (h - new_h) // 2
 
         cropped = frame[y_start : y_start + new_h, x_start : x_start + new_w]
-        img = Image.fromarray(cropped)
+        img = Image.fromarray(cropped.astype(np.uint8))
         resized = img.resize((w, h), Image.Resampling.LANCZOS)
         return np.asarray(resized)
 
