@@ -7,6 +7,7 @@ import pytest
 from moviepy import ColorClip
 
 
+
 @pytest.fixture
 def tmp_clips_dir(tmp_path: Path) -> Path:
     """Create a directory with short synthetic color clips."""

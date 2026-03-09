@@ -1,4 +1,4 @@
-"""Beat analysis and beat-group partitioning."""
+"""Beat analysis, beat-group partitioning, and energy analysis."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,3 +74,77 @@ def group_beats(
             i += group_size
 
     return groups
+
+
+@dataclass
+class EnergySection:
+    start: float
+    end: float
+    mean_energy: float
+
+
+def find_peak_energy_time(path: Path | str) -> float:
+    """Return the timestamp (in seconds) of the single highest-RMS frame."""
+    path = Path(path)
+    y, sr = librosa.load(str(path), sr=None)
+    rms = librosa.feature.rms(y=y)[0]
+    peak_frame = int(np.argmax(rms))
+    return float(librosa.frames_to_time(peak_frame, sr=sr))
+
+
+def analyze_energy(
+    path: Path | str,
+    window_duration: float = 60.0,
+    num_sections: int = 3,
+) -> list[EnergySection]:
+    """Find the most energetic non-overlapping sections of an audio file.
+
+    Uses librosa RMS energy with a sliding window approach.
+    Returns up to num_sections sections sorted by start time.
+    """
+    path = Path(path)
+    y, sr = librosa.load(str(path), sr=None)
+    duration = librosa.get_duration(y=y, sr=sr)
+
+    # Clamp window to full duration if audio is shorter
+    window = min(window_duration, duration)
+    if window < 15.0:
+        window = min(15.0, duration)
+
+    # Compute RMS energy per frame
+    rms = librosa.feature.rms(y=y)[0]
+    frame_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr)
+
+    # Compute mean energy for each 1-second step position
+    candidates: list[tuple[float, float, float]] = []
+    step = 1.0
+    pos = 0.0
+    while pos + window <= duration + 0.01:
+        end = min(pos + window, duration)
+        mask = (frame_times >= pos) & (frame_times < end)
+        if np.any(mask):
+            mean_e = float(np.mean(rms[mask]))
+            candidates.append((pos, end, mean_e))
+        pos += step
+
+    # If no candidates (very short audio), use the whole thing
+    if not candidates:
+        mean_e = float(np.mean(rms)) if len(rms) > 0 else 0.0
+        return [EnergySection(start=0.0, end=duration, mean_energy=mean_e)]
+
+    # Sort by energy descending and greedily pick non-overlapping
+    candidates.sort(key=lambda c: c[2], reverse=True)
+    selected: list[EnergySection] = []
+    for start, end, energy in candidates:
+        if len(selected) >= num_sections:
+            break
+        # Check for overlap with already-selected sections
+        overlaps = any(
+            not (end <= s.start or start >= s.end) for s in selected
+        )
+        if not overlaps:
+            selected.append(EnergySection(start=start, end=end, mean_energy=energy))
+
+    # Sort by start time
+    selected.sort(key=lambda s: s.start)
+    return selected
