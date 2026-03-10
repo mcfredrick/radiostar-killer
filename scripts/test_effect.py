@@ -12,6 +12,7 @@ Usage examples:
 
 import argparse
 import inspect
+import logging
 import random
 import sys
 from pathlib import Path
@@ -22,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from radiostar_killer.effects import BUILTIN_NAMED, CUSTOM_NAMED, apply_named_effect
 from radiostar_killer.splitscreen import (
-    PANEL_EFFECT_RATE,
     _apply_panel_effects,
     build_climax_burst,
     compose_split_screen,
@@ -97,13 +97,13 @@ def main() -> None:
     parser.add_argument("--tempo", type=float, default=DEFAULT_TEMPO, help="BPM for climax-burst step duration (default: 120)")
     parser.add_argument("--layout", choices=["grid", "radial"], default=None, help="Force split screen layout for climax-burst or splitscreen-N (default: random)")
     parser.add_argument("--double-time", action=argparse.BooleanOptionalAction, default=None, help="Force double-time for climax-burst (default: random 70%%)")
-    parser.add_argument("--panel-effect-rate", type=float, default=PANEL_EFFECT_RATE,
-                        help=f"Probability each split-screen panel gets a random filter (default: {PANEL_EFFECT_RATE})")
-    parser.add_argument("--contrast", action=argparse.BooleanOptionalAction, default=None,
-                        help="Force contrast tint mode for split-screen panels (default: random)")
     parser.add_argument("--seed", type=int, default=SEED, help="RNG seed for reproducible results")
     parser.add_argument("--list", action="store_true", help="List all available effects and exit")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging for effect/filter decisions")
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s: %(message)s")
 
     if args.list:
         print("Available effects:")
@@ -133,11 +133,9 @@ def main() -> None:
         panels = SPLITSCREEN_PANELS[args.effect]
         # Cycle paths to get exactly `panels` clips
         selected = [clip_paths[i % len(clip_paths)] for i in range(panels)]
-        mode = "contrast" if args.contrast else ("random effects" if args.contrast is False else "random mode")
-        print(f"Compositing {panels}-panel split screen from {len(selected)} clips ({mode})...")
+        print(f"Compositing {panels}-panel split screen from {len(selected)} clips...")
         loaded = [_prepare(p, args.duration) for p in selected]
-        loaded = _apply_panel_effects(loaded, rng, rate=args.panel_effect_rate,
-                                      **_kwargs_for(_apply_panel_effects, args))
+        loaded = _apply_panel_effects(loaded, rng)
         result = compose_split_screen(loaded, RESOLUTION, FPS, layout=args.layout or "grid")
     else:
         # Per-clip effect: apply to every clip, then concatenate

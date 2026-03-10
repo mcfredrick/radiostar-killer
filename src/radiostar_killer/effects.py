@@ -161,28 +161,6 @@ def apply_named_effect(name: str, clip: VideoClip, rng: random.Random) -> VideoC
     raise KeyError(f"Unknown effect '{name}'. Available: {sorted(list(BUILTIN_NAMED) + list(CUSTOM_NAMED))}")
 
 
-# "none" means no effect applied; included so distinct-effect assignment can leave a panel unfiltered
-ALL_EFFECT_NAMES: list[str] = ["none"] + list(BUILTIN_NAMED) + list(CUSTOM_NAMED)
-
-
-def apply_distinct_effects(clips: list[VideoClip], rng: random.Random) -> list[VideoClip]:
-    """Apply mutually distinct effects to a list of clips.
-
-    Shuffles ALL_EFFECT_NAMES and assigns one per clip without repetition,
-    cycling through the pool only if there are more clips than available names.
-    "none" is included so a panel may receive no effect, but no two panels
-    from the same shuffle cycle will share the same filter.
-    """
-    names = list(ALL_EFFECT_NAMES)
-    rng.shuffle(names)
-    result = []
-    for i, clip in enumerate(clips):
-        name = names[i % len(names)]
-        if name == "none":
-            result.append(clip)
-        else:
-            result.append(apply_named_effect(name, clip, rng))
-    return result
 
 
 def apply_random_effect(

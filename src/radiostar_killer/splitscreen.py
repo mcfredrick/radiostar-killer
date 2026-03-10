@@ -1,12 +1,15 @@
 """Split screen compositing for beat-synced music videos."""
 
+import logging
 import random
 from dataclasses import dataclass
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
 from moviepy import CompositeVideoClip, VideoClip, concatenate_videoclips
+from moviepy.video.fx import BlackAndWhite, InvertColors
 
-from radiostar_killer.effects import apply_distinct_effects, apply_random_effect
 
 # ---------------------------------------------------------------------------
 # Climax burst constants — edit these to tune the feature
@@ -59,21 +62,6 @@ DOUBLE_TIME_PROBABILITY: float = 1.0
 # Probability that a regular split screen runs at double-time
 SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY: float = 0.50
 
-# Probability that any individual panel in a split screen gets a random filter
-PANEL_EFFECT_RATE: float = 0.35
-
-# Probability that a split screen uses coordinated contrast tints (vs random per-panel effects)
-PANEL_CONTRAST_RATE: float = 0.50
-
-# Predefined (r, g, b) channel multipliers for contrast tinting.
-# Shuffled and assigned one-per-panel so adjacent panels always look distinct.
-_CONTRAST_PALETTE: list[tuple[float, float, float]] = [
-    (1.30, 0.85, 0.65),  # warm / orange
-    (0.65, 0.85, 1.30),  # cool / blue
-    (0.70, 1.30, 0.70),  # green
-    (1.20, 0.65, 1.20),  # magenta / purple
-    (1.00, 1.00, 1.00),  # natural (no tint)
-]
 
 
 @dataclass(frozen=True)
@@ -155,11 +143,8 @@ def _select_panel_clips(
     rng: random.Random,
     target_duration: float | None = None,
     mode: str | None = None,
-) -> tuple[list[VideoClip], list[int]]:
-    """Return (n_panels clips, source_ids) drawn from clips_pool using a randomly chosen mode.
-
-    source_ids[i] is the id() of the original source clip for panel i, enabling
-    callers to detect panels that share the same source and apply distinct effects.
+) -> list[VideoClip]:
+    """Return n_panels clips drawn from clips_pool using a randomly chosen mode.
 
     Modes:
       "different"  — pick n_panels clips independently at random (with replacement)
@@ -171,9 +156,11 @@ def _select_panel_clips(
     if mode is None:
         mode = rng.choices(PANEL_MODES, weights=PANEL_MODE_WEIGHTS, k=1)[0]
 
+    logger.debug("panel clip mode: %s (%d panels)", mode, n_panels)
+
     if mode == PANEL_MODE_SAME_CLIP:
         base = rng.choice(clips_pool)
-        return [base] * n_panels, [id(base)] * n_panels
+        return [base] * n_panels
 
     if mode == PANEL_MODE_SAME_PARTS:
         base = rng.choice(clips_pool)
@@ -185,11 +172,10 @@ def _select_panel_clips(
             start = i * offset_step
             looped = _loop_to_duration(base, start + dur)
             result.append(looped.subclipped(start, start + dur))
-        return result, [id(base)] * n_panels
+        return result
 
     # PANEL_MODE_DIFFERENT (default)
-    clips = rng.choices(clips_pool, k=n_panels)
-    return clips, [id(c) for c in clips]
+    return rng.choices(clips_pool, k=n_panels)
 
 
 def _compose_radial(
@@ -241,64 +227,54 @@ def _tint_clip(clip: VideoClip, r: float, g: float, b: float) -> VideoClip:
     return clip.transform(apply)
 
 
-def _apply_contrast_tints(clips: list[VideoClip], rng: random.Random) -> list[VideoClip]:
-    """Assign a different contrasting color tint to each panel.
+# Visually dramatic per-panel effects used when same-source clips share the screen.
+# Each entry is (name, transform) where transform maps a VideoClip → VideoClip.
+# Covers up to 6 panels without repetition (7 entries including "none").
+_DISTINCT_PANEL_POOL: list[tuple[str, object]] = [
+    ("none", lambda c: c),
+    ("black_and_white", lambda c: c.with_effects([BlackAndWhite()])),
+    ("invert", lambda c: c.with_effects([InvertColors()])),
+    ("warm_tint", lambda c: _tint_clip(c, 2.50, 0.50, 0.10)),
+    ("cool_tint", lambda c: _tint_clip(c, 0.10, 0.50, 2.50)),
+    ("green_tint", lambda c: _tint_clip(c, 0.10, 2.50, 0.10)),
+    ("magenta_tint", lambda c: _tint_clip(c, 2.50, 0.10, 2.50)),
+]
 
-    Shuffles _CONTRAST_PALETTE and cycles through it so adjacent panels
-    always have a distinct color cast.
+
+def _apply_distinct_effects(
+    clips: list[VideoClip], rng: random.Random
+) -> tuple[list[VideoClip], list[str]]:
+    """Assign a unique dramatic visual effect to each clip from _DISTINCT_PANEL_POOL.
+
+    Shuffles the pool and assigns one entry per clip without repetition, cycling
+    only if there are more clips than pool entries (max panels is 6; pool has 7).
+    Returns (processed_clips, effect_names_assigned).
     """
-    palette = list(_CONTRAST_PALETTE)
-    rng.shuffle(palette)
-    return [_tint_clip(c, *palette[i % len(palette)]) for i, c in enumerate(clips)]
+    pool = list(_DISTINCT_PANEL_POOL)
+    rng.shuffle(pool)
+    result = []
+    names = []
+    for i, clip in enumerate(clips):
+        name, transform = pool[i % len(pool)]
+        result.append(transform(clip))  # type: ignore[operator]
+        names.append(name)
+    return result, names
 
 
-def _apply_panel_effects(
-    clips: list[VideoClip],
-    rng: random.Random,
-    rate: float = PANEL_EFFECT_RATE,
-    contrast: bool | None = None,
-    source_ids: list[int] | None = None,
-) -> list[VideoClip]:
-    """Apply visual differentiation to split-screen panels.
+def _apply_panel_effects(clips: list[VideoClip], rng: random.Random) -> list[VideoClip]:
+    """Apply distinct dramatic effects to every split-screen panel.
 
-    Pass contrast=True to force coordinated palette tints, contrast=False to
-    force random per-panel effects, or None (default) to decide randomly based
-    on PANEL_CONTRAST_RATE.
-
-    source_ids should be the list returned by _select_panel_clips. Panels that
-    share a source_id are guaranteed distinct effects (including "none") so the
-    same clip never appears identically filtered in two panels simultaneously.
-
-    Clips are normalized to uint8 first so PIL-based effects work regardless
-    of the source clip's internal frame dtype.
+    Every panel always receives a unique entry from _DISTINCT_PANEL_POOL so
+    panels are always visually distinct regardless of whether they share a
+    source clip. Clips are normalized to uint8 first so PIL-based effects work
+    regardless of the source clip's internal frame dtype.
     """
-    use_contrast = (rng.random() < PANEL_CONTRAST_RATE) if contrast is None else contrast
-    if use_contrast:
-        return _apply_contrast_tints(clips, rng)
-
     def to_uint8(get_frame: object, t: float) -> np.ndarray:
         return get_frame(t).astype(np.uint8)  # type: ignore[no-any-return]
 
     normalized = [c.transform(to_uint8) for c in clips]
-
-    # Group panel indices by source clip identity
-    ids = source_ids if source_ids is not None else [id(c) for c in clips]
-    groups: dict[int, list[int]] = {}
-    for i, src_id in enumerate(ids):
-        groups.setdefault(src_id, []).append(i)
-
-    result = list(normalized)
-    for indices in groups.values():
-        if len(indices) == 1:
-            i = indices[0]
-            result[i] = apply_random_effect(normalized[i], rng, rate)
-        else:
-            # Multiple panels share the same source — assign distinct effects so
-            # the same clip is never displayed with the same filter twice at once
-            group_clips = [normalized[i] for i in indices]
-            distinct = apply_distinct_effects(group_clips, rng)
-            for i, processed in zip(indices, distinct):
-                result[i] = processed
+    result, names = _apply_distinct_effects(normalized, rng)
+    logger.debug("panel effects: %d panels → %s", len(clips), names)
     return result
 
 
@@ -398,9 +374,9 @@ def inject_split_screens(
         target_dur = max(c.duration for c in pool)
         if rng.random() < SPLIT_SCREEN_DOUBLE_TIME_PROBABILITY:
             target_dur /= 2
-        panel_clips, source_ids = _select_panel_clips(pool, panels, rng, target_duration=target_dur)
+        panel_clips = _select_panel_clips(pool, panels, rng, target_duration=target_dur)
         panel_clips = [_loop_to_duration(c, target_dur) for c in panel_clips]
-        panel_clips = _apply_panel_effects(panel_clips, rng, source_ids=source_ids)
+        panel_clips = _apply_panel_effects(panel_clips, rng)
         layout = rng.choices(LAYOUT_MODES, weights=LAYOUT_WEIGHTS, k=1)[0]
         composite = compose_split_screen(panel_clips, resolution, fps, layout=layout)
         result[start_idx : start_idx + panels] = [composite]
@@ -460,10 +436,10 @@ def build_climax_burst(
 
     steps: list[VideoClip] = []
     for n_panels in CLIMAX_PANEL_SEQUENCE:
-        panel_clips, source_ids = _select_panel_clips(
+        panel_clips = _select_panel_clips(
             clips_pool, n_panels, rng, target_duration=step_duration
         )
-        panel_clips = _apply_panel_effects(panel_clips, rng, source_ids=source_ids)
+        panel_clips = _apply_panel_effects(panel_clips, rng)
         sized = [_loop_to_duration(c, step_duration) for c in panel_clips]
         step_layout = layout or rng.choices(LAYOUT_MODES, weights=CLIMAX_LAYOUT_WEIGHTS, k=1)[0]
         steps.append(compose_split_screen(sized, resolution, fps, layout=step_layout))
