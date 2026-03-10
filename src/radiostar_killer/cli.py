@@ -14,6 +14,7 @@ _EFFECT_RATE_DEFAULT = 0.75
 _TRANSITION_RATE_DEFAULT = 1.0
 _TRANSITION_DURATION_DEFAULT = 0.3
 _SPLIT_SCREEN_COUNT_DEFAULT = 2
+_GENERATED_RATE_DEFAULT = 0.3
 
 
 def parse_resolution(value: str) -> tuple[int, int]:
@@ -48,6 +49,8 @@ def _apply_randomize(args: argparse.Namespace) -> None:
         args.split_screen = rng.random() < 0.6
     if not args.climax_burst:
         args.climax_burst = rng.random() < 0.7
+    if not args.generated_clips:
+        args.generated_clips = rng.random() < 0.5
 
     if args.effect_rate is None:
         args.effect_rate = round(rng.uniform(0.3, 1.0), 2) if args.effects else _EFFECT_RATE_DEFAULT
@@ -60,6 +63,10 @@ def _apply_randomize(args: argparse.Namespace) -> None:
     # 33% chance of fixing panel count per occurrence rather than randomizing per split
     if args.split_screen and args.split_screen_panels is None and rng.random() < 0.33:
         args.split_screen_panels = rng.choice([2, 4, 6])
+    if args.generated_rate is None:
+        args.generated_rate = (
+            round(rng.uniform(0.1, 0.5), 2) if args.generated_clips else _GENERATED_RATE_DEFAULT
+        )
 
 
 def _apply_defaults(args: argparse.Namespace) -> None:
@@ -77,6 +84,8 @@ def _apply_defaults(args: argparse.Namespace) -> None:
         args.transition_duration = _TRANSITION_DURATION_DEFAULT
     if args.split_screen_count is None:
         args.split_screen_count = _SPLIT_SCREEN_COUNT_DEFAULT
+    if args.generated_rate is None:
+        args.generated_rate = _GENERATED_RATE_DEFAULT
 
 
 def _build_reproduce_command(args: argparse.Namespace) -> str:
@@ -117,6 +126,10 @@ def _build_reproduce_command(args: argparse.Namespace) -> str:
             parts += ["--split-screen-panels", str(args.split_screen_panels)]
     if args.climax_burst:
         parts += ["--climax-burst"]
+    if args.generated_clips:
+        parts += ["--generated-clips", "--generated-rate", str(args.generated_rate)]
+        if args.generated_style != "random":
+            parts += ["--generated-style", args.generated_style]
 
     if args.title:
         parts += ["--title", f'"{args.title}"']
@@ -305,6 +318,26 @@ def main() -> None:
         help="Fixed panel count per split screen (2, 4, or 6; default: random per occurrence)",
     )
     parser.add_argument(
+        "--generated-clips",
+        action="store_true",
+        help="Intersperse algorithmically generated visualizer clips with real clips",
+    )
+    parser.add_argument(
+        "--generated-rate",
+        type=float,
+        default=None,
+        help=(
+            f"Proportion of clips to replace with generated visualizers "
+            f"(0.0–1.0, default: {_GENERATED_RATE_DEFAULT})"
+        ),
+    )
+    parser.add_argument(
+        "--generated-style",
+        choices=["plasma", "radial_pulse", "spectrum_bars", "random"],
+        default="random",
+        help="Visualizer style for generated clips (default: random)",
+    )
+    parser.add_argument(
         "--fast",
         action="store_true",
         help="Use ultrafast encoding preset and max threads for faster export",
@@ -333,6 +366,7 @@ def main() -> None:
                 ("--transitions", args.transitions),
                 ("--split-screen", args.split_screen),
                 ("--climax-burst", args.climax_burst),
+                ("--generated-clips", args.generated_clips),
             ] if on
         ]
         print(f"[randomize] Enabled: {', '.join(enabled) if enabled else '(none)'}")
@@ -371,6 +405,9 @@ def main() -> None:
             split_screen_count=args.split_screen_count,
             split_screen_panels=args.split_screen_panels,
             climax_burst=args.climax_burst,
+            generated_clips=args.generated_clips,
+            generated_rate=args.generated_rate,
+            generated_style=args.generated_style,
             fast=args.fast,
         )
         if isinstance(result, list):

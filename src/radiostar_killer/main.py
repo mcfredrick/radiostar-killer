@@ -4,15 +4,15 @@ from pathlib import Path
 
 import numpy as np
 
-from radiostar_killer.audio import analyze_audio, analyze_energy, group_beats
+from radiostar_killer.audio import analyze_audio, analyze_energy, find_peak_energy_time, group_beats
 from radiostar_killer.clips import assign_clips_to_groups, discover_clips
 from radiostar_killer.formats import PRESETS, FormatPreset
+from radiostar_killer.generated import GeneratedClipsConfig
 from radiostar_killer.overlays import (
     InfoOverlayConfig,
     TitleCardConfig,
     snap_to_nearest_beat,
 )
-from radiostar_killer.audio import find_peak_energy_time
 from radiostar_killer.splitscreen import ClimaxBurstConfig, SplitScreenConfig
 from radiostar_killer.video import build_video
 
@@ -42,6 +42,9 @@ def run(
     split_screen_count: int = 2,
     split_screen_panels: int | None = None,
     climax_burst: bool = False,
+    generated_clips: bool = False,
+    generated_rate: float = 0.3,
+    generated_style: str = "random",
     fast: bool = False,
 ) -> Path | list[Path]:
     """Run the full music video generation pipeline.
@@ -101,6 +104,16 @@ def run(
     if climax_burst:
         print("  Climax burst: enabled (2→4→6→4→2 panels at peak energy)")
 
+    generated_clips_config = None
+    if generated_clips:
+        generated_clips_config = GeneratedClipsConfig(
+            rate=generated_rate,
+            style=generated_style,
+            tempo=audio_info.tempo,
+            beat_times=audio_info.beat_times,
+        )
+        print(f"  Generated clips: enabled (rate: {generated_rate:.0%}, style: {generated_style})")
+
     if shorts:
         return _build_shorts(
             clips_dir=clips_dir,
@@ -120,6 +133,7 @@ def run(
             info_overlay_config=info_overlay_config,
             split_screen_config=split_screen_config,
             climax_burst=climax_burst,
+            generated_clips_config=generated_clips_config,
             fast=fast,
         )
 
@@ -156,6 +170,7 @@ def run(
         info_overlay_config=info_overlay_config,
         split_screen_config=split_screen_config,
         climax_burst_config=climax_burst_config,
+        generated_clips_config=generated_clips_config,
         fast=fast,
     )
 
@@ -181,6 +196,7 @@ def _build_shorts(
     info_overlay_config: InfoOverlayConfig | None = None,
     split_screen_config: SplitScreenConfig | None = None,
     climax_burst: bool = False,
+    generated_clips_config: GeneratedClipsConfig | None = None,
     fast: bool = False,
 ) -> list[Path]:
     """Build YouTube Shorts from the most energetic sections."""
@@ -251,6 +267,7 @@ def _build_shorts(
             info_overlay_config=info_overlay_config,
             split_screen_config=split_screen_config,
             climax_burst_config=section_climax_config,
+            generated_clips_config=generated_clips_config,
             fast=fast,
         )
         output_paths.append(short_output)

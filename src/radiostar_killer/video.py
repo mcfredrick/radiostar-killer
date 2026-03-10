@@ -6,6 +6,7 @@ from pathlib import Path
 from moviepy import (
     AudioFileClip,
     CompositeVideoClip,
+    VideoClip,
     VideoFileClip,
     concatenate_videoclips,
 )
@@ -23,6 +24,7 @@ from radiostar_killer.overlays import (
     create_info_overlay,
     create_title_card,
 )
+from radiostar_killer.generated import GeneratedClipsConfig, inject_generated_clips
 from radiostar_killer.splitscreen import (
     CLIMAX_PANEL_SEQUENCE,
     ClimaxBurstConfig,
@@ -108,6 +110,7 @@ def build_video(
     info_overlay_config: InfoOverlayConfig | None = None,
     split_screen_config: SplitScreenConfig | None = None,
     climax_burst_config: ClimaxBurstConfig | None = None,
+    generated_clips_config: GeneratedClipsConfig | None = None,
     fast: bool = False,
 ) -> Path:
     """Build the final beat-synced video from clip assignments.
@@ -120,15 +123,24 @@ def build_video(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    if generated_clips_config is not None:
+        assignments = inject_generated_clips(
+            assignments, generated_clips_config, preset.resolution, rng
+        )
+
     prepared = []
     for assignment in assignments:
-        clip = prepare_clip(
-            assignment.path,
-            assignment.target_duration,
-            preset.resolution,
-            preset.fps,
-            rng,
-        )
+        if assignment.generator is not None:
+            clip = VideoClip(assignment.generator, duration=assignment.target_duration)
+            clip = clip.with_fps(preset.fps)
+        else:
+            clip = prepare_clip(
+                assignment.path,
+                assignment.target_duration,
+                preset.resolution,
+                preset.fps,
+                rng,
+            )
         if effects:
             clip = apply_random_effect(clip, rng, effect_rate)
         prepared.append(clip)

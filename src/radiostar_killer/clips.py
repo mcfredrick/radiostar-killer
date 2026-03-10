@@ -1,9 +1,11 @@
 """Clip discovery and beat-group assignment."""
 
 import random
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 from moviepy import VideoFileClip
 
 SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".avi"}
@@ -14,6 +16,8 @@ class ClipAssignment:
     path: Path
     target_duration: float
     original_duration: float
+    # When set, this clip is rendered algorithmically instead of loaded from path.
+    generator: Callable[[float], np.ndarray] | None = field(default=None, repr=False)
 
 
 def discover_clips(directory: Path | str) -> list[Path]:
