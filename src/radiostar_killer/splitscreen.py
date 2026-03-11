@@ -416,6 +416,7 @@ def build_climax_burst(
     rng: random.Random,
     layout: str | None = None,
     double_time: bool | None = None,
+    total_duration: float | None = None,
 ) -> VideoClip:
     """Build the climax burst sequence defined by CLIMAX_PANEL_SEQUENCE.
 
@@ -427,12 +428,16 @@ def build_climax_burst(
     each step lasts half a normal step, creating a faster, more intense pulse.
 
     Pass layout or double_time explicitly to override random selection (useful
-    for testing).
+    for testing). Pass total_duration to pin the burst to a specific length
+    (distributes evenly across steps), preserving total video duration.
     """
     use_double = rng.random() < DOUBLE_TIME_PROBABILITY if double_time is None else double_time
-    step_duration = climax_panel_duration(tempo)
-    if use_double:
-        step_duration /= 2
+    if total_duration is not None:
+        step_duration = total_duration / len(CLIMAX_PANEL_SEQUENCE)
+    else:
+        step_duration = climax_panel_duration(tempo)
+        if use_double:
+            step_duration /= 2
 
     steps: list[VideoClip] = []
     for n_panels in CLIMAX_PANEL_SEQUENCE:
@@ -478,7 +483,17 @@ def inject_climax_burst(
 
     target_idx = min(target_idx, len(prepared) - burst_len)
 
-    burst = build_climax_burst(prepared, config.tempo, resolution, fps, rng)
+    replaced_clips = prepared[target_idx : target_idx + burst_len]
+    total_replaced = sum(c.duration for c in replaced_clips)
+    logger.debug(
+        "Climax burst: replacing %d clips at idx %d (total %.2fs) with burst",
+        burst_len, target_idx, total_replaced,
+    )
+
+    burst = build_climax_burst(
+        prepared, config.tempo, resolution, fps, rng, total_duration=total_replaced
+    )
+    logger.debug("Burst duration: %.2fs", burst.duration)
 
     result = list(prepared)
     result[target_idx : target_idx + burst_len] = [burst]

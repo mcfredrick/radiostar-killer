@@ -73,6 +73,12 @@ def group_beats(
             groups.append((start, end))
             i += group_size
 
+    # Ensure coverage starts from the beginning of the audio — beats may not be
+    # detected in a quiet intro, leaving a gap that makes the video shorter than
+    # the song.
+    if groups and groups[0][0] > 0.0:
+        groups[0] = (0.0, groups[0][1])
+
     return groups
 
 
