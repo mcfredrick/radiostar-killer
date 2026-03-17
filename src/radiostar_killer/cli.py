@@ -67,6 +67,9 @@ def _apply_randomize(args: argparse.Namespace) -> None:
         args.generated_rate = (
             round(rng.uniform(0.1, 0.5), 2) if args.generated_clips else _GENERATED_RATE_DEFAULT
         )
+    # 40% chance of overlay mode when generated clips are active; random opacity 0.5–0.9
+    if args.generated_clips and args.generated_overlay_alpha is None and rng.random() < 0.4:
+        args.generated_overlay_alpha = round(rng.uniform(0.5, 0.9), 2)
 
 
 def _apply_defaults(args: argparse.Namespace) -> None:
@@ -130,6 +133,8 @@ def _build_reproduce_command(args: argparse.Namespace) -> str:
         parts += ["--generated-clips", "--generated-rate", str(args.generated_rate)]
         if args.generated_style != "random":
             parts += ["--generated-style", args.generated_style]
+        if args.generated_overlay_alpha is not None:
+            parts += ["--generated-overlay-alpha", str(args.generated_overlay_alpha)]
 
     if args.title:
         parts += ["--title", f'"{args.title}"']
@@ -333,9 +338,20 @@ def main() -> None:
     )
     parser.add_argument(
         "--generated-style",
-        choices=["plasma", "radial_pulse", "spectrum_bars", "random"],
+        choices=["plasma", "radial_pulse", "spectrum_bars", "waveform", "starfield", "tunnel", "grid_pulse", "random"],
         default="random",
         help="Visualizer style for generated clips (default: random)",
+    )
+    parser.add_argument(
+        "--generated-overlay-alpha",
+        type=float,
+        default=None,
+        metavar="ALPHA",
+        help=(
+            "Composite visualizers over source video instead of replacing clips. "
+            "ALPHA (0.0–1.0) controls opacity; dark areas become transparent. "
+            "Omit to use replacement mode (default)."
+        ),
     )
     parser.add_argument(
         "--fast",
@@ -408,6 +424,7 @@ def main() -> None:
             generated_clips=args.generated_clips,
             generated_rate=args.generated_rate,
             generated_style=args.generated_style,
+            generated_overlay_alpha=args.generated_overlay_alpha,
             fast=args.fast,
         )
         if isinstance(result, list):

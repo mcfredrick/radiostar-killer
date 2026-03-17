@@ -45,6 +45,7 @@ def run(
     generated_clips: bool = False,
     generated_rate: float = 0.3,
     generated_style: str = "random",
+    generated_overlay_alpha: float | None = None,
     fast: bool = False,
 ) -> Path | list[Path]:
     """Run the full music video generation pipeline.
@@ -111,8 +112,10 @@ def run(
             style=generated_style,
             tempo=audio_info.tempo,
             beat_times=audio_info.beat_times,
+            overlay_alpha=generated_overlay_alpha,
         )
-        print(f"  Generated clips: enabled (rate: {generated_rate:.0%}, style: {generated_style})")
+        mode = f"overlay α={generated_overlay_alpha}" if generated_overlay_alpha is not None else "replacement"
+        print(f"  Generated clips: enabled (rate: {generated_rate:.0%}, style: {generated_style}, mode: {mode})")
 
     if shorts:
         return _build_shorts(

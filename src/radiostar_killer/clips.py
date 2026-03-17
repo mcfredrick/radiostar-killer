@@ -18,6 +18,9 @@ class ClipAssignment:
     original_duration: float
     # When set, this clip is rendered algorithmically instead of loaded from path.
     generator: Callable[[float], np.ndarray] | None = field(default=None, repr=False)
+    # When set alongside generator, composite the visualizer over the source video
+    # with luminance-based alpha (dark areas transparent) scaled by this factor.
+    overlay_alpha: float | None = field(default=None)
 
 
 def discover_clips(directory: Path | str) -> list[Path]:

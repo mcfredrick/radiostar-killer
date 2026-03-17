@@ -130,7 +130,24 @@ def build_video(
 
     prepared = []
     for assignment in assignments:
-        if assignment.generator is not None:
+        if assignment.generator is not None and assignment.overlay_alpha is not None:
+            from radiostar_killer.generated import _make_overlay_clip
+
+            base = prepare_clip(
+                assignment.path,
+                assignment.target_duration,
+                preset.resolution,
+                preset.fps,
+                rng,
+            )
+            overlay = _make_overlay_clip(
+                assignment.generator,
+                assignment.target_duration,
+                preset.fps,
+                assignment.overlay_alpha,
+            )
+            clip = CompositeVideoClip([base, overlay], size=preset.resolution)
+        elif assignment.generator is not None:
             clip = VideoClip(assignment.generator, duration=assignment.target_duration)
             clip = clip.with_fps(preset.fps)
         else:

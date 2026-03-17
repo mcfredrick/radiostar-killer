@@ -49,6 +49,10 @@ uv run radiostar-killer ./my-clips ./song.wav -o music-video.mp4 --seed 42
 | `--split-screen-count` | `2` | Number of split screen occurrences to inject (max recommended: 3) |
 | `--split-screen-panels` | random | Fixed panel count per split screen (`2`, `4`, or `6`); omit for random per occurrence |
 | `--climax-burst` | off | Inject a 2→4→6→4→2 panel burst at the song's peak energy moment |
+| `--generated-clips` | off | Intersperse algorithmically generated visualizer clips with real clips |
+| `--generated-rate` | `0.3` | Proportion of clips to replace with generated visualizers (0.0–1.0) |
+| `--generated-style` | `random` | Visualizer style: `plasma`, `radial_pulse`, `spectrum_bars`, `waveform`, `starfield`, `tunnel`, `grid_pulse`, or `random` |
+| `--generated-overlay-alpha` | off | Composite visualizers over source video at this opacity (0.0–1.0) instead of replacing clips |
 | `--randomize` | off | Randomly enable visual flags (see [Randomize](#randomize)) |
 | `--title` | — | Song title (required for `--title-card` and `--info-overlay`) |
 | `--artist` | — | Artist name (required for `--info-overlay`) |
@@ -176,6 +180,37 @@ When split screen or climax burst is active, each panel is automatically treated
 
 Both modes normalize clip frames to uint8 before applying effects, so they work with any clip source.
 
+### Generated Visualizer Clips
+
+Use `--generated-clips` to replace a portion of real video clips with algorithmically generated beat-reactive visuals. Seven styles are available:
+
+| Style | Description |
+|-------|-------------|
+| `plasma` | Classic demo-scene sine wave plasma with cycling HSV colors |
+| `radial_pulse` | Colored rings burst from the center on each beat |
+| `spectrum_bars` | EQ-style spectrum bars that pulse in height on each beat |
+| `waveform` | Multiple glowing sine waves that bloom in width on each beat |
+| `starfield` | Stars stream outward from center; rainbow or white, surge on beats |
+| `tunnel` | Zoom tunnel with rotating color wheel and tempo-synced ring depth |
+| `grid_pulse` | Grid of dots with a ripple wave propagating from the center |
+
+```bash
+# Replace ~30% of clips with random visualizer styles
+uv run radiostar-killer ./clips ./song.wav --generated-clips
+
+# Use a specific style at a higher replacement rate
+uv run radiostar-killer ./clips ./song.wav --generated-clips --generated-style waveform --generated-rate 0.5
+
+# Overlay mode: composite visualizers over the source footage instead of replacing it
+# Dark areas of the visualizer become transparent, bright elements show through
+uv run radiostar-killer ./clips ./song.wav --generated-clips --generated-overlay-alpha 0.8
+
+# Combine with other features
+uv run radiostar-killer ./clips ./song.wav --generated-clips --effects --transitions --climax-burst
+```
+
+In **overlay mode** (`--generated-overlay-alpha`), visualizers are composited over the original video footage using a luminance-based mask — dark/black areas become fully transparent so only the bright visual elements are visible on top of the real clips.
+
 ### Randomize
 
 Use `--randomize` to let the tool randomly enable visual features (`--effects`, `--transitions`, `--split-screen`, `--climax-burst`) and their tuning parameters. Any flags you pass explicitly are respected — only unset flags are randomized.
@@ -214,6 +249,29 @@ uv run ruff check src/ tests/
 # Type checking
 uv run mypy src/
 ```
+
+### Visualizer Demo Script
+
+`scripts/demo_visualizers.py` renders demo clips for each visualizer style — standalone and optionally overlaid on real footage.
+
+```bash
+# Render all 7 styles (standalone, with click track)
+uv run scripts/demo_visualizers.py
+
+# Render only the new styles
+uv run scripts/demo_visualizers.py --new-only
+
+# Standalone + overlay variants
+uv run scripts/demo_visualizers.py --clips ./my-clips --include-overlay
+
+# Everything at 90 BPM with a combined reel
+uv run scripts/demo_visualizers.py --clips ./my-clips --include-overlay --reel --tempo 90
+
+# List available styles
+uv run scripts/demo_visualizers.py --list
+```
+
+Output files are named `demo_{style}.mp4` (standalone) and `demo_{style}_overlay.mp4` (overlay). `--reel` concatenates all into `demo_all.mp4`.
 
 ### Effect Testing Script
 
